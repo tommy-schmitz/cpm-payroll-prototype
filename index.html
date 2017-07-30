@@ -88,11 +88,11 @@ var when_done_with_auth_stuff = function() {
       /*if*/(file_id === undefined) ?
         NO_OP.then(() => {
           const action = gapi.client.drive.files.create({
-            title: 'Timesheet ' + email,
+            name: 'Timesheet ' + email,
             mimeType: 'application/vnd.google-apps.drive-sdk',
           });
         return action; }).then((r) => {
-          file_id = r.id;
+          file_id = r.result.id;
 
           // Notify cpmpayroll about the newly created timesheet:
           const action = jsonp('https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApe'+
