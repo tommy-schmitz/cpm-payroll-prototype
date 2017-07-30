@@ -1,15 +1,12 @@
 <html>
   <head>
+    <script src="https://www.gstatic.com/realtime/realtime-client-utils.js">  </script>
     <script type="text/javascript">
 
 const CLIENT_ID = '835615821089-0mmun003p819e379vpurms6f1joj33qk.apps.googleusercontent.com';
-const SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly'];
+const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 
-const load = new Promise((fulfill, reject) => {
-  window.onload = function() {
-    fulfill();
-  };
-});
+var rt_utils = new utils.RealtimeUtils({clientId: CLIENT_ID});
 
 /*global*/ arghablargha = function() {
   gapi.auth.authorize({
@@ -23,6 +20,7 @@ const handle_auth_result = function(auth_result) {
   const authorize_div = document.getElementById('authorize-div');
   if(auth_result && !auth_result.error) {
     authorize_div.style.display = 'none';
+    start_the_application();
   } else {
     authorize_div.style.display = 'inline';
     const authorize_button = document.getElementById('authorize-button');
@@ -37,12 +35,17 @@ const handle_auth_result = function(auth_result) {
   }
 };
 
+var start_the_application = function() {
+  rt_utils.createRealtimeFile('Temp', function(r) {
+    console.log(r.id);
+  });
+};
+
     </script>
-    <script src="https://apis.google.com/js/client.js?onload=arghablargha">
-    </script>
+    <script src="https://apis.google.com/js/client.js?onload=arghablargha">  </script>
   </head>
   <body>
-    successfully updated 2
+    successfully updated 3
     <br />
     <div id="authorize-div" style="display: none">
       <span>Authorize access to Drive API</span>
