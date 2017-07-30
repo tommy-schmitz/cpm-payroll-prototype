@@ -1,10 +1,17 @@
+<!DOCTYPE html>
 <html>
   <head>
     <script src="https://www.gstatic.com/realtime/realtime-client-utils.js">  </script>
     <script type="text/javascript">
 
-const CLIENT_ID = '835615821089-0mmun003p819e379vpurms6f1joj33qk.apps.googleusercontent.com';
-const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
+const DO_NOW = new Promise((resolve, reject) => resolve());
+
+const CLIENT_ID = '663604848714-cdppq8r1sc2sqdt7lu3nc05r4utjr0vf.apps.googleusercontent.com';
+  //'835615821089-0mmun003p819e379vpurms6f1joj33qk.apps.googleusercontent.com';
+const SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/userinfo.email',
+];
 
 var rt_utils = new utils.RealtimeUtils({clientId: CLIENT_ID});
 
@@ -36,9 +43,28 @@ const handle_auth_result = function(auth_result) {
 };
 
 var start_the_application = function() {
-  rt_utils.createRealtimeFile('Temp', function(r) {
-    console.log(r.id);
+  let email = null;
+  DO_NOW.then(() => {
+    const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
+  return action; }).then( () => {
+//    const action = gapi.client.load('plus', 'v1');
+//  return action; }).then( () => {
+    // Look up my timesheet, in case it already exists.
+    const action = gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: '1sajRfA9hYZacI-a4UH0-cgfwf1hvzpVczUwRhn2kwGY',  // A public list of all timesheets
+      range: 'A1',
+    });
+  return action; }).then( (response) => {
+    const bulletin = JSON.parse(response.result.values[0][0]);
+    const file_id = bulletin[email];
+    console.log(file_id);
   });
+
+//    // Create new
+//    rt_utils.createRealtimeFile('Temp', function(r) {
+//      console.log(r.id);
+//    });
+
 };
 
     </script>
