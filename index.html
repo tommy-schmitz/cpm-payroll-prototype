@@ -4,7 +4,7 @@
     <script src="https://www.gstatic.com/realtime/realtime-client-utils.js">  </script>
     <script type="text/javascript">
 
-const DO_NOW = new Promise((resolve, reject) => resolve());
+const NO_OP = new Promise((resolve, reject) => resolve());
 
 const jsonp = function(url) {
   return new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ const handle_auth_result = function(auth_result) {
 var when_done_with_auth_stuff = function() {
   let email = null;
   let file_id = null;
-  DO_NOW.then(() => {
+  NO_OP.then(() => {
     const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
   return action; }).then( () => {
     const action = gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
@@ -84,38 +84,24 @@ var when_done_with_auth_stuff = function() {
     file_id = bulletin[email];
 
     // Create timesheet (and set file_id) if it doesn't exist yet.
-    const action = new Promise((resolve, reject) => {
-      if(file_id === undefined) {
-        rt_utils.createRealtimeFile('Timesheet ' + email, function(r) {
-          console.log(r);
+    const action =
+      /*if*/(file_id === undefined) ?
+        NO_OP.then(() => {
+          const action = gapi.client.drive.files.create({
+            title: 'Timesheet ' + email,
+            mimeType: 'application/vnd.google-apps.drive-sdk',
+          });
+        return action; }).then((r) => {
           file_id = r.id;
 
           // Notify cpmpayroll about the newly created timesheet:
-
-          /*try*/ (
-            DO_NOW.then(() => {
-              console.log('I supplied all these same things! ' + file_id);
-              const action = gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: '1CCxFgOvNU5LEC2W_TWPW3eybi3bgZS6eIARcBQW1qvI',  // A publicly editable ss.
-                range: 'A1',
-                valueInputOption: 'RAW',
-              }, {
-                range: 'A1',
-                values: [[file_id]],
-              });
-            return action; }).then((response) => {
-              jsonp('https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApev1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec?file_id='+file_id);
-            return action; }).then((response) => {
-              resolve();
-            })
-          ).catch((e) => {
-            reject(e);
-          });
-        });
-      } else {
-        resolve();
-      }
-    });
+          const action = jsonp('https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApe'+
+                               'v1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec?file_id='+file_id);
+        return action; }).then(() => {
+        })
+      /*else*/ :
+        NO_OP;
+    ;
   return action; }).then( () => {
     console.log(file_id);
   });
