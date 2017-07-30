@@ -6,19 +6,30 @@
 
 const DO_NOW = new Promise((resolve, reject) => resolve());
 
+const jsonp = function(url) {
+  return new Promise((resolve, reject) => {
+    var scr = document.createElement('script');
+    global_callback = resolve;
+    scr.src = url;
+    document.head.appendChild(scr);
+    scr.remove();
+  });
+};
+
 const CLIENT_ID = '663604848714-cdppq8r1sc2sqdt7lu3nc05r4utjr0vf.apps.googleusercontent.com';
   //'835615821089-0mmun003p819e379vpurms6f1joj33qk.apps.googleusercontent.com';
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
-var rt_utils = new utils.RealtimeUtils({clientId: CLIENT_ID});
+const rt_utils = new utils.RealtimeUtils({clientId: CLIENT_ID});
 
 /*global*/ arghablargha = function() {
   gapi.auth.authorize({
     client_id: CLIENT_ID,
-    scope: SCOPES.join(''),
+    scope: SCOPES.join(' '),
     immediate: true
   }, handle_auth_result);
 };
@@ -27,14 +38,14 @@ const handle_auth_result = function(auth_result) {
   const authorize_div = document.getElementById('authorize-div');
   if(auth_result && !auth_result.error) {
     authorize_div.style.display = 'none';
-    start_the_application();
+    when_done_with_auth_stuff();
   } else {
     authorize_div.style.display = 'inline';
     const authorize_button = document.getElementById('authorize-button');
     authorize_button.onclick = function(_) {
       gapi.auth.authorize({
         client_id: CLIENT_ID,
-        scope: SCOPES,
+        scope: SCOPES.join(' '),
         immediate: false
       }, handle_auth_result);
       return false;
@@ -42,13 +53,23 @@ const handle_auth_result = function(auth_result) {
   }
 };
 
-var start_the_application = function() {
+var when_done_with_auth_stuff = function() {
   let email = null;
+  let file_id = null;
   DO_NOW.then(() => {
     const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
   return action; }).then( () => {
-//    const action = gapi.client.load('plus', 'v1');
-//  return action; }).then( () => {
+    const action = gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+  return action; }).then( () => {
+    const action = gapi.client.load('plus', 'v1');  // For getting the email address ...
+  return action; }).then( () => {
+    // Get my email address.
+    const action = new Promise((resolve, reject) => {
+      gapi.client.plus.people.get({userId: 'me'}).execute(resolve);
+    });
+  return action; }).then( (response) => {
+    email = response.emails[0].value;
+
     // Look up my timesheet, in case it already exists.
     const action = gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: '1sajRfA9hYZacI-a4UH0-cgfwf1hvzpVczUwRhn2kwGY',  // A public list of all timesheets
@@ -56,15 +77,48 @@ var start_the_application = function() {
     });
   return action; }).then( (response) => {
     const bulletin = JSON.parse(response.result.values[0][0]);
-    const file_id = bulletin[email];
+
+    if(email === null)
+      throw "The email shouldn't be null at this point";
+
+    file_id = bulletin[email];
+
+    // Create timesheet (and set file_id) if it doesn't exist yet.
+    const action = new Promise((resolve, reject) => {
+      if(file_id === undefined) {
+        rt_utils.createRealtimeFile('Timesheet ' + email, function(r) {
+          console.log(r);
+          file_id = r.id;
+
+          // Notify cpmpayroll about the newly created timesheet:
+
+          /*try*/ (
+            DO_NOW.then(() => {
+              console.log('I supplied all these same things! ' + file_id);
+              const action = gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId: '1CCxFgOvNU5LEC2W_TWPW3eybi3bgZS6eIARcBQW1qvI',  // A publicly editable ss.
+                range: 'A1',
+                valueInputOption: 'RAW',
+              }, {
+                range: 'A1',
+                values: [[file_id]],
+              });
+            return action; }).then((response) => {
+              jsonp('https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApev1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec?file_id='+file_id);
+            return action; }).then((response) => {
+              resolve();
+            })
+          ).catch((e) => {
+            reject(e);
+          });
+        });
+      } else {
+        resolve();
+      }
+    });
+  return action; }).then( () => {
     console.log(file_id);
   });
-
-//    // Create new
-//    rt_utils.createRealtimeFile('Temp', function(r) {
-//      console.log(r.id);
-//    });
-
 };
 
     </script>
@@ -74,7 +128,7 @@ var start_the_application = function() {
     successfully updated 3
     <br />
     <div id="authorize-div" style="display: none">
-      <span>Authorize access to Drive API</span>
+      <span>Authorize</span>
       <!--Button for the user to click to initiate auth sequence -->
       <button id="authorize-button">
         Authorize
