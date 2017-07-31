@@ -21,7 +21,7 @@ const SCOPES = [
 const realtime = {
   load(file_id) {
     return new Promise((resolve, reject) => {
-      gapi.client.drive.realtime.load(file_id, resolve, ()=>{}, reject);
+      gapi.drive.realtime.load(file_id, resolve, ()=>{}, reject);
     });
   },
 };
@@ -60,6 +60,8 @@ var when_done_with_auth_stuff = function() {
     const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
   return action; }).then( () => {
     const action = gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+  return action; }).then( () => {
+    const action = gapi.load('drive-realtime');
   return action; }).then( () => {
     const action = gapi.client.load('plus', 'v1');  // For getting the email address ...
   return action; }).then( () => {
@@ -105,6 +107,26 @@ var when_done_with_auth_stuff = function() {
   return action; }).then( () => {
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
+
+    // Set up the UI
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+
     const model = doc.getModel();
+    const root = model.getRoot();
+    root.addEventListener('value_changed', function(ev) {
+      gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
+      console.log('value changed');
+    });
+
+    if(root.isEmpty()) {  // This doesn't guarantee single-initialization, but who cares.
+      // We should initialize.
+
+      const string = model.createString();
+      string.setText('initial contents');
+      root.set('string', string);
+    } else {
+      gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
+    }
   });
 };
