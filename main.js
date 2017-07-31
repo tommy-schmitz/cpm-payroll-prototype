@@ -1,4 +1,7 @@
 const NO_OP = new Promise((resolve, reject) => resolve());
+const escape_errors = function(promise) {
+  return promise.then((x)=>({type:'success',result:x}), (e)=>({type:'failure',error:e}));
+};
 
 // A simple web request protocol similar to XMLHttpRequest:
 const jsonp = function(url) {
@@ -59,6 +62,8 @@ const handle_auth_result = function(auth_result) {
 };
 
 var when_done_with_auth_stuff = function() {
+  let file_id = null;
+
   NO_OP.then(() => {
     const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
   return action; }).then( () => {
@@ -77,10 +82,24 @@ var when_done_with_auth_stuff = function() {
     // Consult the server to get the definitive ID of the timesheet. See Apps Script code for details.
     const action = jsonp( 'https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApe' +
                           'v1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec?potential_id=' + potential_id );
-  return action; }).then((file_id) => {
+  return action; }).then((r) => {
+    file_id = r;
+
+    // Try to create the file. If it already exists, no problem: just ignore the resulting error.
+    const action = escape_errors(
+      gapi.client.drive.files.create({
+        name: 'Realtime timesheet',
+        mimeType: 'application/vnd.google-apps.drive-sdk',
+        id: file_id,
+      })
+    );
+  return action; }).then( (r) => {
+    // If we get an error saying the file already exists, then that's no problem. Otherwise, re-throw.
+    if(r.type === 'failure' && r.error.result.error.errors[0].reason !== 'fileIdInUse')
+      throw r.error;
+
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
-
     // Set up the UI
     const textarea = document.createElement('textarea');
     document.body.appendChild(textarea);
