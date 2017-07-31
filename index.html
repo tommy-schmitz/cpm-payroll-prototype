@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <script src="https://www.gstatic.com/realtime/realtime-client-utils.js">  </script>
     <script type="text/javascript">
 
 const NO_OP = new Promise((resolve, reject) => resolve());
@@ -24,7 +23,13 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
-const rt_utils = new utils.RealtimeUtils({clientId: CLIENT_ID});
+const realtime = {
+  load(file_id) {
+    return new Promise((resolve, reject) => {
+      gapi.client.drive.realtime.load(file_id, resolve, ()=>{}, reject);
+    });
+  },
+};
 
 /*global*/ arghablargha = function() {
   gapi.auth.authorize({
@@ -103,7 +108,9 @@ var when_done_with_auth_stuff = function() {
         NO_OP;
     ;
   return action; }).then( () => {
-    console.log(file_id);
+    const action = realtime.load(file_id);
+  return action; }).then( (doc) => {
+    const model = doc.getModel();
   });
 };
 
