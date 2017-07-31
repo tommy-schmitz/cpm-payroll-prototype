@@ -1,12 +1,18 @@
 const NO_OP = new Promise((resolve, reject) => resolve());
 
+// A simple web request protocol similar to XMLHttpRequest:
 const jsonp = function(url) {
   return new Promise((resolve, reject) => {
-    var scr = document.createElement('script');
-    global_callback = resolve;
-    scr.src = url;
-    document.head.appendChild(scr);
-    scr.remove();
+    var s = document.createElement('script');
+    global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
+      if(response.type === 'success')
+        resolve(response.result);
+      else
+        reject(response.error);
+    };
+    s.src = url;
+    document.head.appendChild(s);
+    s.remove();
   });
 };
 
@@ -15,7 +21,6 @@ const CLIENT_ID = '663604848714-cdppq8r1sc2sqdt7lu3nc05r4utjr0vf.apps.googleuser
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/userinfo.email',
 ];
 
 const realtime = {
@@ -54,8 +59,6 @@ const handle_auth_result = function(auth_result) {
 };
 
 var when_done_with_auth_stuff = function() {
-  let email = null;
-  let file_id = null;
   NO_OP.then(() => {
     const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
   return action; }).then( () => {
@@ -63,48 +66,10 @@ var when_done_with_auth_stuff = function() {
   return action; }).then( () => {
     const action = gapi.load('drive-realtime');
   return action; }).then( () => {
-    const action = gapi.client.load('plus', 'v1');  // For getting the email address ...
-  return action; }).then( () => {
-    // Get my email address.
-    const action = new Promise((resolve, reject) => {
-      gapi.client.plus.people.get({userId: 'me'}).execute(resolve);
-    });
-  return action; }).then( (response) => {
-    email = response.emails[0].value;
-
-    // Look up my timesheet, in case it already exists.
-    const action = gapi.client.sheets.spreadsheets.values.get({
-      spreadsheetId: '1sajRfA9hYZacI-a4UH0-cgfwf1hvzpVczUwRhn2kwGY',  // A public list of all timesheets
-      range: 'A1',
-    });
-  return action; }).then( (response) => {
-    const bulletin = JSON.parse(response.result.values[0][0]);
-
-    if(email === null)
-      throw "The email shouldn't be null at this point";
-
-    file_id = bulletin[email];
-
-    // Create timesheet (and set file_id) if it doesn't exist yet.
-    const action =
-      /*if*/(file_id === undefined) ?
-        NO_OP.then(() => {
-          const action = gapi.client.drive.files.create({
-            name: 'Timesheet ' + email,
-            mimeType: 'application/vnd.google-apps.drive-sdk',
-          });
-        return action; }).then((r) => {
-          file_id = r.result.id;
-
-          // Notify cpmpayroll about the newly created timesheet:
-          const action = jsonp('https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApe'+
-                               'v1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec?file_id='+file_id);
-        return action; }).then(() => {
-        })
-      /*else*/ :
-        NO_OP;
-    ;
-  return action; }).then( () => {
+    // Get the file ID of the realtime file containing the employee's timesheet.
+    const action = jsonp( 'https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApe' +
+                          'v1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec'                        );
+  return action; }).then((file_id) => {
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
 
@@ -115,16 +80,16 @@ var when_done_with_auth_stuff = function() {
     const model = doc.getModel();
     const root = model.getRoot();
     root.addEventListener('value_changed', function(ev) {
+      // Ideally this shouldn't happen often ... Just once when the file is initialized ...
       gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
       console.log('value changed');
     });
 
     if(root.isEmpty()) {  // This doesn't guarantee single-initialization, but who cares.
-      // We should initialize.
-
+      // We should initialize the file contents.
       const string = model.createString();
       string.setText('initial contents');
-      root.set('string', string);
+      root.set('string', string);  // Triggers the event listener above ...
     } else {
       gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
     }
