@@ -66,9 +66,17 @@ var when_done_with_auth_stuff = function() {
   return action; }).then( () => {
     const action = gapi.load('drive-realtime');
   return action; }).then( () => {
-    // Get the file ID of the realtime file containing the employee's timesheet.
+    // Generate a file ID that could be used as the ID for the timesheet, in case the timesheet don't exist.
+    const action = gapi.client.drive.files.generateIds({
+      count: 1,
+      space: 'drive',
+    });
+  return action; }).then( (response) => {
+    const potential_id = response.result.ids[0];
+
+    // Consult the server to get the definitive ID of the timesheet. See Apps Script code for details.
     const action = jsonp( 'https://script.google.com/macros/s/AKfycbws6DYq0TnAzeuUApe' +
-                          'v1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec'                        );
+                          'v1ugEhhz2FZoi1bZ_kbb08DQTutkv67k/exec?potential_id=' + potential_id );
   return action; }).then((file_id) => {
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
