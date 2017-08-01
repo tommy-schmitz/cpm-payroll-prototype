@@ -98,14 +98,48 @@ var when_done_with_auth_stuff = function() {
     if(r.type === 'failure' && r.error.result.error.errors[0].reason !== 'fileIdInUse')
       throw r.error;
 
+    // Now give write-access to cpmpayroll@cpm.org. Again, ignore error if it doesn't work.
+    const action = escape_errors(
+      gapi.client.drive.permissions.create({
+        fileId: file_id,
+        sendNotificationEmail: false,
+        role: 'writer',
+        type: 'user',
+        emailAddress: 'cpmpayroll@cpm.org',
+      })
+    );
+  return action; }).then( (r) => {
+    // If we get an error saying that we don't own the file, then that's no problem. Otherise, re-throw.
+    if(r.type === 'failure')
+      throw r.error;
+
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
-    // Set up the UI
-    const textarea = document.createElement('textarea');
-    document.body.appendChild(textarea);
-
     const model = doc.getModel();
     const root = model.getRoot();
+
+    // Set up the UI
+    const textarea = document.createElement('textarea');
+    document.body.innerHTML = '';
+    const changes_saved_div = document.createElement('div');
+    document.body.appendChild(changes_saved_div);
+    document.body.appendChild(document.createElement('br'));
+    document.body.appendChild(textarea);
+
+    // Set up the thing that lets you know if your changes have been saved.
+    root.addEventListener('object_changed', function(ev) {
+      if(ev.isLocal  &&  changes_saved_div.innerText === 'All changes saved in Drive.')
+        changes_saved_div.innerText = '...';
+    });
+    setTimeout(function recurse() {
+      setTimeout(recurse, 1000);
+
+      if(doc.saveDelay === 0)
+        changes_saved_div.innerText = 'All changes saved in Drive.';
+      else if(doc.saveDelay > 10000)
+        changes_saved_div.innerText = 'Your recent changes have not yet been saved ...';
+    }, 0);
+
     root.addEventListener('value_changed', function(ev) {
       // Ideally this shouldn't happen often ... Just once when the file is initialized ...
       gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);

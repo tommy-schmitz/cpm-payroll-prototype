@@ -63,6 +63,8 @@ const handle_auth_result = function(auth_result) {
 
 const user_selects_timesheet_to_view = function(db) {
   return new Promise((resolve, reject) => {
+    document.body.innerHTML = '';
+
     const div = document.createElement('div');
     document.body.appendChild(div);
     div.appendChild(document.createTextNode('Whose timesheet would you like to view?'));
@@ -114,12 +116,30 @@ var when_done_with_auth_stuff = function() {
     file_id = db.contents[email].timesheet;
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
-    // Set up the UI
-    const textarea = document.createElement('textarea');
-    document.body.appendChild(textarea);
-
     const model = doc.getModel();
     const root = model.getRoot();
+
+    // Set up the UI
+    const textarea = document.createElement('textarea');
+    document.body.innerHTML = '';
+    const changes_saved_div = document.createElement('div');
+    document.body.appendChild(changes_saved_div);
+    document.body.appendChild(document.createElement('br'));
+    document.body.appendChild(textarea);
+
+    // Set up the thing that lets you know if your changes have been saved.
+    root.addEventListener('object_changed', function(ev) {
+      if(ev.isLocal  &&  changes_saved_div.innerText === 'All changes saved in Drive.')
+        changes_saved_div.innerText = '...';
+    });
+    setTimeout(function recurse() {
+      setTimeout(recurse, 1000);
+
+      if(doc.saveDelay === 0)
+        changes_saved_div.innerText = 'All changes saved in Drive.';
+      else if(doc.saveDelay > 10000)
+        changes_saved_div.innerText = 'Your recent changes have not yet been saved ...';
+    }, 0);
 
     root.addEventListener('value_changed', function(ev) {
       // Ideally this shouldn't ever happen, but presumably race conditions make it possible.
