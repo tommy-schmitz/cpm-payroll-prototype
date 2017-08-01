@@ -115,7 +115,7 @@ var when_done_with_auth_stuff = function() {
     if(root.isEmpty()) {  // This doesn't guarantee single-initialization, but who cares.
       // We should initialize the file contents.
       const string = model.createString();
-      string.setText('initial contents');
+      string.setText('This is your "timesheet" initial contents.');
       root.set('string', string);  // Triggers the event listener above ...
     } else {
       gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
