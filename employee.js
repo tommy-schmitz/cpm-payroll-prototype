@@ -2,6 +2,11 @@ const NO_OP = new Promise((resolve, reject) => resolve());
 const escape_errors = function(promise) {
   return promise.then((x)=>({type:'success',result:x}), (e)=>({type:'failure',error:e}));
 };
+const stacktrace = function() {
+  try {throw new Error();} catch(e) {return e.stack;}
+};
+const warn = function() {console.log('weird ... ' + stacktrace());};
+const assert = function(b) {if(!b) throw new Error('assert fail, ' + stacktrace());};
 
 // A simple web request protocol similar to XMLHttpRequest:
 const jsonp = function(url) {
@@ -141,22 +146,56 @@ var when_done_with_auth_stuff = function() {
       array.push(a);
       for(let j=0; j<5; ++j)
         a.push({  // This object will get extended later.
-          collab: contents.get('array,'+j+','+i)),
+          x: j,
+          y: i,
+          collab: contents.get('array,'+j+','+i),
         });
     }
 
     // Set up the UI
     document.body.innerHTML = '';  // Clear everything ...
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.style.width  = '100%';
+    input.style.height = '100%';
+    let editing_x = null;
+    let editing_y = null;
+    let binding = null;
+    input.addEventListener('blur', function(ev) {
+      if(editing_x === null  ||  editing_y === null  ||  binding === null)
+        return warn();
+
+      const {td, span, collab} = array[editing_y][editing_x];
+      td.removeChild(input);
+      td.appendChild(span);
+      assert(binding.collaborativeObject === collab);
+      assert(binding.domElement === input);
+      binding.unbind();
+
+      editing_x = editing_y = binding = null;
+    });
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
     const table = document.createElement('table');
     for(let i=0; i<5; ++i) {
       const tr = document.createElement('tr');
       for(let j=0; j<5; ++j) {
-        const td = document.createElement('td');
-        array[i][j].td = td;
         const span = document.createElement('span');
         array[i][j].span = span;
+        const td = document.createElement('td');
+        array[i][j].td = td;
+        td.style.border = '1px solid black';
+        td.style.width  = '100px';
+        td.style.height = '20px';
+        const {collab, x, y} = array[i][j];  // Captured by the closure below
+        td.addEventListener('dblclick', function(ev) {
+          td.removeChild(span);
+          td.appendChild(input);
+          input.focus();
+          editing_x = x;
+          editing_y = y;
+          binding = gapi.drive.realtime.databinding.bindString(collab, input);
+        });
         td.appendChild(span);
         tr.appendChild(td);
       }
