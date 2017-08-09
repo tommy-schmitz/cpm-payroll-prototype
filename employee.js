@@ -117,20 +117,74 @@ var when_done_with_auth_stuff = function() {
   return action; }).then( (doc) => {
     const model = doc.getModel();
     const root = model.getRoot();
+    let contents = root.get('contents');
+
+    // Migration from format 0 to format 1
+    // Also works as an initializer for format 1
+    if(contents === null) {
+      const type = model.createString('1');
+      contents = model.createMap();
+      contents.set('type', type);
+      for(let i=0; i<5; ++i)
+        for(let j=0; j<5; ++j)
+          contents.set('array,'+j+','+i, model.createString(''));
+      model.beginCompoundOperation('migrate 0 to 1', false);
+      root.set('contents', contents);
+      root.delete('string');
+      model.endCompoundOperation();
+    }
+
+    // Load the model into a nice ordinary 2D array.
+    const array = [];
+    for(let i=0; i<5; ++i) {
+      const a = [];
+      array.push(a);
+      for(let j=0; j<5; ++j)
+        a.push({  // This object will get extended later.
+          collab: contents.get('array,'+j+','+i)),
+        });
+    }
 
     // Set up the UI
-    const textarea = document.createElement('textarea');
-    document.body.innerHTML = '';
+    document.body.innerHTML = '';  // Clear everything ...
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
-    document.body.appendChild(document.createElement('br'));
-    document.body.appendChild(textarea);
+    const table = document.createElement('table');
+    for(let i=0; i<5; ++i) {
+      const tr = document.createElement('tr');
+      for(let j=0; j<5; ++j) {
+        const td = document.createElement('td');
+        array[i][j].td = td;
+        const span = document.createElement('span');
+        array[i][j].span = span;
+        td.appendChild(span);
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    document.body.appendChild(table);
 
-    // Set up the thing that lets you know if your changes have been saved.
+    const update_ui = function() {
+      for(let i=0; i<5; ++i) {
+        for(let j=0; j<5; ++j) {
+          array[i][j].span.innerText = array[i][j].collab.text;
+        }
+      }
+    };
+
+    update_ui();  // Initialize the UI properly.
+
     root.addEventListener('object_changed', function(ev) {
-      if(ev.isLocal  &&  changes_saved_div.innerText === 'All changes saved in Drive.')
-        changes_saved_div.innerText = '...';
+      update_ui();
+
+      // Update the thing that lets you know if your changes have been saved (if necessary).
+      if(ev.isLocal) {
+        if(changes_saved_div.innerText === 'All changes saved in Drive.')
+          changes_saved_div.innerText = '...';
+      }
     });
+
+    // Finish setting up the thing that lets you know if your changes have been saved.
     setTimeout(function recurse() {
       setTimeout(recurse, 1000);
 
@@ -139,20 +193,5 @@ var when_done_with_auth_stuff = function() {
       else if(doc.saveDelay > 10000)
         changes_saved_div.innerText = 'Your recent changes have not yet been saved ...';
     }, 0);
-
-    root.addEventListener('value_changed', function(ev) {
-      // Ideally this shouldn't happen often ... Just once when the file is initialized ...
-      gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
-      console.log('value changed');
-    });
-
-    if(root.isEmpty()) {  // This doesn't guarantee single-initialization, but who cares.
-      // We should initialize the file contents.
-      const string = model.createString();
-      string.setText('This is your "timesheet" initial contents.');
-      root.set('string', string);  // Triggers the event listener above ...
-    } else {
-      gapi.drive.realtime.databinding.bindString(root.get('string'), textarea);
-    }
   });
 };
