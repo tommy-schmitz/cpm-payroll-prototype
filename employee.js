@@ -224,19 +224,17 @@ var when_done_with_auth_stuff = function() {
       th.setAttribute('scope', 'row');
       tr.appendChild(th);
       // Create editable cells
-      for(let j=0; j<5; ++j) {
+      for(let j=0; j<2; ++j) {
         const span = document.createElement('span');
         array[i][j].span = span;
         const div = document.createElement('div');
         array[i][j].div = div;
         div.style.height = '25px';
-        div.style.width = '100px';
         div.style.overflow = 'hidden';
         div.appendChild(span);
         const td = document.createElement('td');
         array[i][j].td = td;
         td.style.border = '1px solid black';
-        td.style.width  = '100px';
         td.style.height = '25px';
         const {collab, x, y} = array[i][j];  // Captured by the closure below
         td.addEventListener('dblclick', function(ev) {
@@ -251,6 +249,8 @@ var when_done_with_auth_stuff = function() {
         td.appendChild(div);
         tr.appendChild(td);
       }
+      array[i][0].div.style.width = array[i][0].td.style.width = '150px';
+      array[i][1].div.style.width = array[i][1].td.style.width = '50px';
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -260,7 +260,7 @@ var when_done_with_auth_stuff = function() {
 
     const update_ui = function() {
       for(let i=0; i<5; ++i) {
-        for(let j=0; j<5; ++j) {
+        for(let j=0; j<2; ++j) {
           array[i][j].span.innerText = array[i][j].collab.text;
         }
       }
