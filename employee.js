@@ -167,9 +167,9 @@ var when_done_with_auth_stuff = function() {
       if(editing_x === null  ||  editing_y === null  ||  binding === null)
         return warn();
 
-      const {td, div, collab} = array[editing_y][editing_x];
+      const {span, div, collab} = array[editing_y][editing_x];
       td.removeChild(input);
-      td.appendChild(div);
+      div.appendChild(span);
       assert(binding.collaborativeObject === collab);
       assert(binding.domElement === input);
       binding.unbind();
@@ -187,11 +187,14 @@ var when_done_with_auth_stuff = function() {
     for(let i=0; i<5; ++i) {
       const tr = document.createElement('tr');
       for(let j=0; j<5; ++j) {
+        const span = document.createElement('span');
+        array[i][j].span = span;
         const div = document.createElement('div');
         array[i][j].div = div;
         div.style.height = '20px';
         div.style.width = '100px';
         div.style.overflow = 'hidden';
+        div.appendChild(span);
         const td = document.createElement('td');
         array[i][j].td = td;
         td.style.border = '1px solid black';
@@ -199,7 +202,7 @@ var when_done_with_auth_stuff = function() {
         td.style.height = '20px';
         const {collab, x, y} = array[i][j];  // Captured by the closure below
         td.addEventListener('dblclick', function(ev) {
-          td.removeChild(div);
+          div.removeChild(span);
           td.appendChild(input);
           input.focus();
           editing_x = x;
@@ -216,7 +219,7 @@ var when_done_with_auth_stuff = function() {
     const update_ui = function() {
       for(let i=0; i<5; ++i) {
         for(let j=0; j<5; ++j) {
-          array[i][j].div.innerText = array[i][j].collab.text;
+          array[i][j].span.innerText = array[i][j].collab.text;
         }
       }
     };
