@@ -183,6 +183,7 @@ var when_done_with_auth_stuff = function() {
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
     const table = document.createElement('table');
+    table.style.borderCollapse = 'collapse';
     for(let i=0; i<5; ++i) {
       const tr = document.createElement('tr');
       for(let j=0; j<5; ++j) {
