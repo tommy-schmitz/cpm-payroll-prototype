@@ -163,10 +163,13 @@ var when_done_with_auth_stuff = function() {
         });
     }
 
-    // Set up the UI
+    // Next, set up the UI ...
+
     document.body.innerHTML = '';  // Clear everything ...
+
     document.body.style.fontFamily = 'sans-serif';
     document.body.style.fontSize = '0.83333em';
+
     const input = document.createElement('input');
     input.type = 'text';
     input.style.width  = '100%';
@@ -191,12 +194,36 @@ var when_done_with_auth_stuff = function() {
       if(ev.key === 'Enter')
         input.blur();
     });
+
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
+
+    // Create table
     const table = document.createElement('table');
     table.style.borderCollapse = 'collapse';
+    // Create header row
+    const thead = document.createElement('thead');
+    const headings = [
+      'Date',
+      'Duties - Describe Briefly',
+      'Daily Hours Worked',
+    ];
+    for(let j=0; j<headings.length; ++j) {
+      const th = document.createElement('th');
+      th.innerText = headings[j];
+      thead.appendChild(th);
+    }
+    table.appendChild(thead);
+    // Create other rows
+    const tbody = document.createElement('tbody');
     for(let i=0; i<5; ++i) {
       const tr = document.createElement('tr');
+      // Create row "header" cell
+      const th = document.createElement('th');
+      th.innerText = '(date goes here)';
+      th.setAttribute('scope', 'row');
+      tr.appendChild(th);
+      // Create editable cells
       for(let j=0; j<5; ++j) {
         const span = document.createElement('span');
         array[i][j].span = span;
@@ -224,9 +251,12 @@ var when_done_with_auth_stuff = function() {
         td.appendChild(div);
         tr.appendChild(td);
       }
-      table.appendChild(tr);
+      tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
     document.body.appendChild(table);
+
+    // Done making the UI.
 
     const update_ui = function() {
       for(let i=0; i<5; ++i) {
@@ -236,7 +266,8 @@ var when_done_with_auth_stuff = function() {
       }
     };
 
-    update_ui();  // Initialize the UI properly.
+    // Now initialize the UI properly.
+    update_ui();
 
     root.addEventListener('object_changed', function(ev) {
       update_ui();
