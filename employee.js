@@ -8,6 +8,17 @@ const stacktrace = function() {
 const warn = function() {console.log('weird ... ' + stacktrace());};
 const assert = function(b) {if(!b) throw new Error('assert fail, ' + stacktrace());};
 
+// Positions element e1 at the place where element e2 is.
+const put_element_over = function(e1, e2) {
+  const {left, top, width, height} = e2.getBoundingClientRect();
+  const s = e1.style;
+  s.left     = (left - window.pageXOffset) + 'px';
+  s.top      = (top - window.pageYOffset) + 'px';
+  s.width    = (width - 3) + 'px';   //-3 because e2 will be a 'td' element, I think?
+  s.height   = (height - 3) + 'px';  //ditto
+  s.position = 'absolute';
+};
+
 // A simple web request protocol similar to XMLHttpRequest:
 const jsonp = function(url) {
   return new Promise((resolve, reject) => {
@@ -168,7 +179,7 @@ var when_done_with_auth_stuff = function() {
         return warn();
 
       const {span, div, collab} = array[editing_y][editing_x];
-      td.removeChild(input);
+      document.body.removeChild(input);
       div.appendChild(span);
       assert(binding.collaborativeObject === collab);
       assert(binding.domElement === input);
@@ -191,7 +202,7 @@ var when_done_with_auth_stuff = function() {
         array[i][j].span = span;
         const div = document.createElement('div');
         array[i][j].div = div;
-        div.style.height = '20px';
+        div.style.height = '25px';
         div.style.width = '100px';
         div.style.overflow = 'hidden';
         div.appendChild(span);
@@ -199,11 +210,12 @@ var when_done_with_auth_stuff = function() {
         array[i][j].td = td;
         td.style.border = '1px solid black';
         td.style.width  = '100px';
-        td.style.height = '20px';
+        td.style.height = '25px';
         const {collab, x, y} = array[i][j];  // Captured by the closure below
         td.addEventListener('dblclick', function(ev) {
           div.removeChild(span);
-          td.appendChild(input);
+          document.body.appendChild(input);
+          put_element_over(input, td);
           input.focus();
           editing_x = x;
           editing_y = y;
