@@ -114,21 +114,16 @@ var when_done_with_auth_stuff = function() {
     if(r.type === 'failure' && r.error.result.error.errors[0].reason !== 'fileIdInUse')
       throw r.error;
 
-    // Now give write-access to cpmpayroll@cpm.org. Again, ignore error if it doesn't work.
-    const action = escape_errors(
+    // Now give write-access to cpmpayroll@cpm.org. This operation should be idemptotent ... I think.
+    const action =
       gapi.client.drive.permissions.create({
         fileId: file_id,
         sendNotificationEmail: false,
         role: 'writer',
         type: 'user',
         emailAddress: 'cpmpayroll@cpm.org',
-      })
-    );
-  return action; }).then( (r) => {
-    // If we get an error saying that we don't own the file, then that's no problem. Otherise, re-throw.
-    if(r.type === 'failure')
-      throw r.error;
-
+      });
+  return action; }).then( () => {
     const action = realtime.load(file_id);
   return action; }).then( (doc) => {
     const model = doc.getModel();
