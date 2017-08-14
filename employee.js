@@ -154,6 +154,8 @@ var when_done_with_auth_stuff = function() {
 
     // Set up the UI
     document.body.innerHTML = '';  // Clear everything ...
+    document.body.style.fontFamily = 'sans-serif';
+    document.body.style.fontSize = '0.83333em';
     const input = document.createElement('input');
     input.type = 'text';
     input.style.width  = '100%';
