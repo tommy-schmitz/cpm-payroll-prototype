@@ -176,6 +176,10 @@ var when_done_with_auth_stuff = function() {
 
       editing_x = editing_y = binding = null;
     });
+    input.addEventListener('keydown', function(ev) {
+      if(ev.key === 'Enter')
+        input.blur();
+    });
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
     const table = document.createElement('table');
