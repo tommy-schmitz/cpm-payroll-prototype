@@ -62,6 +62,27 @@ const handle_auth_result = function(auth_result) {
   const authorize_div = document.getElementById('authorize-div');
   if(auth_result && !auth_result.error) {
     authorize_div.style.display = 'none';
+
+// This code doesn't seem to work.
+/*
+    // Set a timeout to refresh the oauth thing every 45 minutes.
+    setTimeout(function recurse() {
+      console.log("I'm going to try to refresh the OAuth thing now ...");
+      gapi.auth.authorize({
+        client_id: CLIENT_ID,
+        scope: SCOPES.join(' '),
+        immediate: true
+      }, function(auth_result) {
+        if(auth_result && !auth_result.error) {
+          console.log('Successfully refreshed the OAuth thing');
+          setTimeout(recurse, 2700000);
+        } else {
+          console.log('I was not able to refresh the OAuth thing!!');
+        }
+      });
+    }, 10000);
+*/
+
     when_done_with_auth_stuff();
   } else {
     authorize_div.style.display = 'inline';
