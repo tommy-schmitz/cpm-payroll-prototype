@@ -1,3 +1,5 @@
+'use strict';
+
 const NO_OP = new Promise((resolve, reject) => resolve());
 const escape_errors = function(promise) {
   return promise.then((x)=>({type:'success',result:x}), (e)=>({type:'failure',error:e}));
@@ -8,12 +10,29 @@ const stacktrace = function() {
 const warn = function() {console.log('weird ... ' + stacktrace());};
 const assert = function(b) {if(!b) throw new Error('assert fail, ' + stacktrace());};
 
+const pp2date = function(pp) {  // Returns the beginning of the day at the beginning of the pay period, UTC
+  const year_code = Math.floor(pp / 24);
+  const year = year_code + 1970;
+  const pp_code = pp - 24 * year_code;
+  const month = Math.floor(pp_code / 2);
+  const which_half = pp_code % 2;
+  const day = (which_half === 0  ?  1  :  16);
+  return new Date(Date.UTC(year, month, day));
+};
+const make_pp_name = function(pp) {
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const date = pp2date(pp);
+  assert(date.getUTCDate() === 1  ||  date.getUTCDate() === 16);
+  const date_range = (date.getUTCDate() === 1  ?  ' 1-15 '  :  ' 16-END ');
+  return MONTHS[date.getUTCMonth()] + date_range + date.getUTCFullYear();
+};
+
 // Positions element e1 at the place where element e2 is.
 const put_element_over = function(e1, e2) {
   const {left, top, width, height} = e2.getBoundingClientRect();
   const s = e1.style;
-  s.left     = (left - window.pageXOffset) + 'px';
-  s.top      = (top - window.pageYOffset) + 'px';
+  s.left     = (left + window.pageXOffset) + 'px';
+  s.top      = (top + window.pageYOffset) + 'px';
   s.width    = (width - 3) + 'px';   //-3 because e2 will be a 'td' element, I think?
   s.height   = (height - 3) + 'px';  //ditto
   s.position = 'absolute';
@@ -23,7 +42,7 @@ const put_element_over = function(e1, e2) {
 const jsonp = function(url) {
   return new Promise((resolve, reject) => {
     var s = document.createElement('script');
-    global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
+    window.global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
       if(response.type === 'success')
         resolve(response.result);
       else
@@ -50,7 +69,7 @@ const realtime = {
   },
 };
 
-/*global*/ arghablargha = function() {
+window.arghablargha = function() {
   gapi.auth.authorize({
     client_id: CLIENT_ID,
     scope: SCOPES.join(' '),
@@ -62,6 +81,27 @@ const handle_auth_result = function(auth_result) {
   const authorize_div = document.getElementById('authorize-div');
   if(auth_result && !auth_result.error) {
     authorize_div.style.display = 'none';
+
+// This code doesn't seem to work.
+/*
+    // Set a timeout to refresh the oauth thing every 45 minutes.
+    setTimeout(function recurse() {
+      console.log("I'm going to try to refresh the OAuth thing now ...");
+      gapi.auth.authorize({
+        client_id: CLIENT_ID,
+        scope: SCOPES.join(' '),
+        immediate: true
+      }, function(auth_result) {
+        if(auth_result && !auth_result.error) {
+          console.log('Successfully refreshed the OAuth thing');
+          setTimeout(recurse, 2700000);
+        } else {
+          console.log('I was not able to refresh the OAuth thing!!');
+        }
+      });
+    }, 10000);
+*/
+
     when_done_with_auth_stuff();
   } else {
     authorize_div.style.display = 'inline';
@@ -111,6 +151,7 @@ const user_selects_timesheet_to_view = function(db) {
 
 var when_done_with_auth_stuff = function() {
   let file_id = null;
+  let db = null;
 
   NO_OP.then(() => {
     const action = gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
@@ -144,22 +185,106 @@ var when_done_with_auth_stuff = function() {
       for(let i=0; i<5; ++i)
         for(let j=0; j<5; ++j)
           contents.set('array,'+j+','+i, model.createString(''));
-      model.beginCompoundOperation('migrate 0 to 1', false);
-      root.set('contents', contents);
-      root.delete('string');
-      model.endCompoundOperation();
+      model.beginCompoundOperation('migrate 0 to 1', false);  try {
+        root.set('contents', contents);
+        root.delete('string');  // Silent fail if it doesn't exist.
+      } finally {model.endCompoundOperation();}
     }
 
-    // Load the model into a nice ordinary 2D array.
+    // Migration from format 1 to format 2
+    // Empty documents will be initialized above and then migrated to format 2, below.
+    if(contents.get('type').text === '1') {
+      const new_contents = model.createMap();
+      new_contents.set('type', model.createString('2'));
+      new_contents.set('timesheets', model.createMap());
+
+      root.set('contents', new_contents);
+      contents = new_contents;
+    }
+
+    // Get the CollaborativeMap for the timesheet for the given pay period, or create if non-existent.
+    const get_timesheet = function(pp) {
+      assert(pp === (pp|0));  // pp should be an integer representing a pay period.
+      let result = contents.get(pp + '');
+      if(result !== null)
+        return result;
+      result = model.createMap();
+      contents.set(pp + '', result);
+      return result;
+    };
+
+    // Get the CollaborativeMap for the given day, or create if non-existent.
+    const get_record = function(timesheet, i) {
+      assert(i === (i|0));  // i should be an 0-based index indicating a day in the appropriate pay period.
+      let result = timesheet.get(i + '');
+      if(result !== null)
+        return result;
+      result = model.createMap();
+      timesheet.set(i + '', result);
+      return result;
+    };
+
+    // Get the CollaborativeString for the given field, or create if non-existent.
+    const get_field = function(record, fieldname) {
+      assert(typeof fieldname === 'string');
+      let result = record.get(fieldname);
+      if(result !== null)
+        return result;
+      result = model.createString();
+      record.set(fieldname, result);
+      return result;
+    };
+
+    let visible_pp = null;  // Initialized just below ...
+
+    // Decide which pay period to show initially
+    if(contents.get('last_submitted_pp') !== null) {
+      visible_pp = (+ contents.get('last_submitted_pp').text) + 1;  //+1 to show the next, non-submitted one
+    } else {
+      // Pick a current-ish pay period.
+      const date = new Date();
+      visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
+    }
+
+    const column_settings = [
+      {
+        type: 'input',
+        field: 'description',
+        title: 'Duties - Describe Briefly',
+        input_type: 'text',
+        width: '150px',
+      },
+      {
+        type: 'input',
+        field: 'hours',
+        title: 'Daily Hours Worked',
+        input_type: 'number',
+        width: '50px',
+      },
+      {
+        type: 'output',
+        field: 'regular',
+        title: 'Regular Hours',
+        width: '50px',
+      },
+      {
+        type: 'output',
+        field: 'overtime',
+        title: 'Overtime Hours',
+        width: '50px',
+      },
+    ];
+
+    // This array will keep handles on some stuff so we can reference them easily.
     const array = [];
-    for(let i=0; i<5; ++i) {
-      const a = [];
-      array.push(a);
-      for(let j=0; j<5; ++j)
-        a.push({  // This object will get extended later.
+    for(let i=0; i<16; ++i) {
+      array.push({  // This object will get extended later.
+        cells: [],
+      });
+      for(let j=0; j<column_settings.length; ++j)
+        array[i].cells.push({  // This object will get extended later.
           x: j,
           y: i,
-          collab: contents.get('array,'+j+','+i),
         });
     }
 
@@ -175,49 +300,42 @@ var when_done_with_auth_stuff = function() {
     table.style.borderCollapse = 'collapse';
     // Create header row
     const thead = document.createElement('thead');
-    const headings = [
-      'Date',
-      'Duties - Describe Briefly',
-      'Daily Hours Worked',
-      'Regular Hours',
-      'Overtime Hours',
-    ];
-    for(let j=0; j<headings.length; ++j) {
+    const temp = document.createElement('th');  // The top left most cell. It says "Date" in it.
+    temp.innerText = 'Date';
+    thead.appendChild(temp);
+    for(let j=0; j<column_settings.length; ++j) {
       const th = document.createElement('th');
-      th.innerText = headings[j];
+      th.innerText = column_settings[j].title;
       thead.appendChild(th);
     }
     table.appendChild(thead);
     // Create other rows
     const tbody = document.createElement('tbody');
-    for(let i=0; i<5; ++i) {
+    for(let i=0; i<16; ++i) {
       const tr = document.createElement('tr');
       // Create row "header" cell
       const th = document.createElement('th');
+      array[i].row_header = th;
       th.innerText = '(date goes here)';
       th.setAttribute('scope', 'row');
       tr.appendChild(th);
-      // Create cells
-      for(let j=0; j<4; ++j) {
+      // Create main cells
+      for(let j=0; j<column_settings.length; ++j) {
         const span = document.createElement('span');
-        array[i][j].span = span;
+        array[i].cells[j].span = span;
         const div = document.createElement('div');
-        array[i][j].div = div;
+        array[i].cells[j].div = div;
         div.style.height = '25px';
         div.style.overflow = 'hidden';
         div.appendChild(span);
         const td = document.createElement('td');
-        array[i][j].td = td;
+        array[i].cells[j].td = td;
         td.style.border = '1px solid black';
         td.style.height = '25px';
+        div.style.width = td.style.width = column_settings[j].width;
         td.appendChild(div);
         tr.appendChild(td);
       }
-      // Set column widths
-      array[i][0].div.style.width = array[i][0].td.style.width = '150px';
-      array[i][1].div.style.width = array[i][1].td.style.width = '50px';
-      array[i][2].div.style.width = array[i][2].td.style.width = '50px';
-      array[i][3].div.style.width = array[i][3].td.style.width = '50px';
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -226,34 +344,33 @@ var when_done_with_auth_stuff = function() {
     // Done making the UI.
 
     const update_ui = function() {
-      for(let i=0; i<5; ++i) {
-        // Update the employee-editable cells
-        for(let j=0; j<2; ++j) {
-          array[i][j].span.innerText = array[i][j].collab.text;
+      const pp_date = pp2date(visible_pp);
+      const next_pp_date = pp2date(visible_pp + 1);
+      const pp_length = Math.round((next_pp_date - pp_date) / 86400000);
+      const timesheet = get_timesheet(visible_pp);
+      for(let i=0; i<pp_length; ++i) {
+        array[i].row_header.innerText
+            = (pp_date.getUTCMonth()+1) + '/' + (pp_date.getUTCDate()+i);  //+1 because 0 is January; etc
+        const record = get_record(timesheet, i);
+        for(let j=0; j<column_settings.length; ++j) {
+          array[i].cells[j].td.style.display = '';
+          const span = array[i].cells[j].span;
+
+          const get = function(fieldname) {return + get_field(record, fieldname).text;}
+          const hours = get('hours');
+
+          if(column_settings[j].type === 'input')
+            span.innerText = get_field(get_record(timesheet, i), column_settings[j].field).text;
+          else if(column_settings[j].field === 'regular')
+            span.innerText = Math.min(hours, 8);
+          else if(column_settings[j].field === 'overtime')
+            span.innerText = Math.max(hours-8, 0);
         }
-
-        // Update regular hours cell
-        array[i][2].span.innerText = (function() {try {
-          const worked = + array[i][1].collab.text;
-          if(worked < 8)
-            return worked;
-          else
-            return 8;
-        } catch(e) {
-          return 'Error.';
-        }}());
-
-        // Update overtime hours cell
-        array[i][3].span.innerText = (function() {try {
-          const worked = + array[i][1].collab.text;
-          if(worked > 8)
-            return worked - 8;
-          else
-            return 0;
-        } catch(e) {
-          return 'Error.';
-        }}());
-
+      }
+      for(let i=pp_length; i<array.length; ++i) {
+        array[i].row_header.innerText = '';
+        for(let j=0; j<column_settings.length; ++j)
+          array[i].cells[j].td.style.display = 'none';
       }
     };
 
@@ -263,5 +380,6 @@ var when_done_with_auth_stuff = function() {
     root.addEventListener('object_changed', function(ev) {
       update_ui();
     });
+
   });
 };
