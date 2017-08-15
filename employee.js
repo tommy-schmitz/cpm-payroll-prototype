@@ -10,6 +10,23 @@ const stacktrace = function() {
 const warn = function() {console.log('weird ... ' + stacktrace());};
 const assert = function(b) {if(!b) throw new Error('assert fail, ' + stacktrace());};
 
+const pp2date = function(pp) {  // Returns the beginning of the day at the beginning of the pay period, UTC
+  const year_code = Math.floor(pp / 24);
+  const year = year_code + 1970;
+  const pp_code = pp - 24 * year_code;
+  const month = Math.floor(pp_code / 2);
+  const which_half = pp_code % 2;
+  const day = (which_half === 0  ?  1  :  16);
+  return new Date(Date.UTC(year, month, day));
+};
+const make_pp_name = function(pp) {
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const date = pp2date(pp);
+  assert(date.getUTCDate() === 1  ||  date.getUTCDate() === 16);
+  const date_range = (date.getUTCDate() === 1  ?  ' 1-15 '  :  ' 16-END ');
+  return MONTHS[date.getUTCMonth()] + date_range + date.getUTCFullYear();
+};
+
 // Positions element e1 at the place where element e2 is.
 const put_element_over = function(e1, e2) {
   const {left, top, width, height} = e2.getBoundingClientRect();
@@ -162,22 +179,92 @@ var when_done_with_auth_stuff = function() {
       for(let i=0; i<5; ++i)
         for(let j=0; j<5; ++j)
           contents.set('array,'+j+','+i, model.createString(''));
-      model.beginCompoundOperation('migrate 0 to 1', false);
-      root.set('contents', contents);
-      root.delete('string');
-      model.endCompoundOperation();
+      model.beginCompoundOperation('migrate 0 to 1', false);  try {
+        root.set('contents', contents);
+        root.delete('string');  // Silent fail if it doesn't exist.
+      } finally {model.endCompoundOperation();}
     }
 
-    // Load the model into a nice ordinary 2D array.
+    // Migration from format 1 to format 2
+    // Empty documents will be initialized above and then migrated to format 2, below.
+    if(contents.get('type').text === '1') {
+      const new_contents = model.createMap();
+      new_contents.set('type', model.createString('2'));
+      new_contents.set('timesheets', model.createMap());
+
+      root.set('contents', new_contents);
+      contents = new_contents;
+    }
+
+    // Get the CollaborativeMap for the timesheet for the given pay period, or create if non-existent.
+    const get_timesheet = function(pp) {
+      assert(pp === (pp|0));  // pp should be an integer representing a pay period.
+      let result = contents.get(pp + '');
+      if(result !== null)
+        return result;
+      result = model.createMap();
+      contents.set(pp + '', result);
+      return result;
+    };
+
+    // Get the CollaborativeMap for the given day, or create if non-existent.
+    const get_record = function(timesheet, i) {
+      assert(i === (i|0));  // i should be an 0-based index indicating a day in the appropriate pay period.
+      let result = timesheet.get(i + '');
+      if(result !== null)
+        return result;
+      result = model.createMap();
+      timesheet.set(i + '', result);
+      return result;
+    };
+
+    // Get the CollaborativeString for the given field, or create if non-existent.
+    const get_field = function(record, fieldname) {
+      assert(typeof fieldname === 'string');
+      let result = record.get(fieldname);
+      if(result !== null)
+        return result;
+      result = model.createString();
+      record.set(fieldname, result);
+      return result;
+    };
+
+    let visible_pp = null;  // Initialized just below ...
+
+    // Decide which pay period to show initially
+    if(contents.get('last_submitted_pp') !== null) {
+      visible_pp = (+ contents.get('last_submitted_pp').text) + 1;  //+1 to show the next, non-submitted one
+    } else {
+      // Pick a current-ish pay period.
+      const date = new Date();
+      visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
+    }
+
+    const column_settings = [
+      {
+        field: 'description',
+        title: 'Duties - Describe Briefly',
+        input_type: 'text',
+        width: '150px',
+      },
+      {
+        field: 'hours',
+        title: 'Daily Hours Worked',
+        input_type: 'number',
+        width: '50px',
+      },
+    ];
+
+    // This array will keep handles on some stuff so we can reference them easily.
     const array = [];
-    for(let i=0; i<5; ++i) {
-      const a = [];
-      array.push(a);
-      for(let j=0; j<5; ++j)
-        a.push({  // This object will get extended later.
+    for(let i=0; i<16; ++i) {
+      array.push({  // This object will get extended later.
+        cells: [],
+      });
+      for(let j=0; j<column_settings.length; ++j)
+        array[i].cells.push({  // This object will get extended later.
           x: j,
           y: i,
-          collab: contents.get('array,'+j+','+i),
         });
     }
 
@@ -188,31 +275,6 @@ var when_done_with_auth_stuff = function() {
     document.body.style.fontFamily = 'sans-serif';
     document.body.style.fontSize = '0.83333em';
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.style.width  = '100%';
-    input.style.height = '100%';
-    let editing_x = null;
-    let editing_y = null;
-    let binding = null;
-    input.addEventListener('blur', function(ev) {
-      if(editing_x === null  ||  editing_y === null  ||  binding === null)
-        return warn();
-
-      const {span, div, collab} = array[editing_y][editing_x];
-      document.body.removeChild(input);
-      div.appendChild(span);
-      assert(binding.collaborativeObject === collab);
-      assert(binding.domElement === input);
-      binding.unbind();
-
-      editing_x = editing_y = binding = null;
-    });
-    input.addEventListener('keydown', function(ev) {
-      if(ev.key === 'Enter')
-        input.blur();
-    });
-
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
 
@@ -221,54 +283,61 @@ var when_done_with_auth_stuff = function() {
     table.style.borderCollapse = 'collapse';
     // Create header row
     const thead = document.createElement('thead');
-    const headings = [
-      'Date',
-      'Duties - Describe Briefly',
-      'Daily Hours Worked',
-    ];
-    for(let j=0; j<headings.length; ++j) {
+    const temp = document.createElement('th');  // The top left most cell. It says "Date" in it.
+    temp.innerText = 'Date';
+    thead.appendChild(temp);
+    for(let j=0; j<column_settings.length; ++j) {
       const th = document.createElement('th');
-      th.innerText = headings[j];
+      th.innerText = column_settings[j].title;
       thead.appendChild(th);
     }
     table.appendChild(thead);
     // Create other rows
     const tbody = document.createElement('tbody');
-    for(let i=0; i<5; ++i) {
+    for(let i=0; i<16; ++i) {
       const tr = document.createElement('tr');
       // Create row "header" cell
       const th = document.createElement('th');
+      array[i].row_header = th;
       th.innerText = '(date goes here)';
       th.setAttribute('scope', 'row');
       tr.appendChild(th);
       // Create editable cells
-      for(let j=0; j<2; ++j) {
+      for(let j=0; j<column_settings.length; ++j) {
         const span = document.createElement('span');
-        array[i][j].span = span;
+        array[i].cells[j].span = span;
         const div = document.createElement('div');
-        array[i][j].div = div;
+        array[i].cells[j].div = div;
         div.style.height = '25px';
         div.style.overflow = 'hidden';
         div.appendChild(span);
         const td = document.createElement('td');
-        array[i][j].td = td;
+        array[i].cells[j].td = td;
         td.style.border = '1px solid black';
         td.style.height = '25px';
-        const {collab, x, y} = array[i][j];  // Captured by the closure below
+        const [x, y] = [j, i];  // Captured by the closure below
+                                // That's a multiple-assignment statement, by the way ...
         td.addEventListener('dblclick', function(ev) {
-          div.removeChild(span);
+          const input = document.createElement('input');
+          const collab = get_field(get_record(get_timesheet(visible_pp), y), column_settings[x].field);
+          const binding = gapi.drive.realtime.databinding.bindString(collab, input);
+          input.addEventListener('blur', function(ev) {
+            document.body.removeChild(input);
+            binding.unbind();
+          });
+          input.addEventListener('keydown', function(ev) {
+            if(ev.key === 'Enter')
+              input.blur();
+          });
+          input.type = column_settings[x].input_type;
           document.body.appendChild(input);
           put_element_over(input, td);
           input.focus();
-          editing_x = x;
-          editing_y = y;
-          binding = gapi.drive.realtime.databinding.bindString(collab, input);
         });
+        div.style.width = td.style.width = column_settings[j].width;
         td.appendChild(div);
         tr.appendChild(td);
       }
-      array[i][0].div.style.width = array[i][0].td.style.width = '150px';
-      array[i][1].div.style.width = array[i][1].td.style.width = '50px';
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -277,10 +346,23 @@ var when_done_with_auth_stuff = function() {
     // Done making the UI.
 
     const update_ui = function() {
-      for(let i=0; i<5; ++i) {
-        for(let j=0; j<2; ++j) {
-          array[i][j].span.innerText = array[i][j].collab.text;
+      const pp_date = pp2date(visible_pp);
+      const next_pp_date = pp2date(visible_pp + 1);
+      const pp_length = Math.round((next_pp_date - pp_date) / 86400000);
+      const timesheet = get_timesheet(visible_pp);
+      for(let i=0; i<pp_length; ++i) {
+        array[i].row_header.innerText
+            = (pp_date.getUTCMonth()+1) + '/' + (pp_date.getUTCDate()+i);  //+1 because 0 is January; etc
+        for(let j=0; j<column_settings.length; ++j) {
+          array[i].cells[j].td.style.display = '';
+          array[i].cells[j].span.innerText
+              = get_field(get_record(timesheet, i), column_settings[j].field).text;
         }
+      }
+      for(let i=pp_length; i<array.length; ++i) {
+        array[i].row_header.innerText = '';
+        for(let j=0; j<column_settings.length; ++j)
+          array[i].cells[j].td.style.display = 'none';
       }
     };
 
