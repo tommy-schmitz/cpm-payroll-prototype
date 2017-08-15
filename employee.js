@@ -1,3 +1,5 @@
+'use strict';
+
 const NO_OP = new Promise((resolve, reject) => resolve());
 const escape_errors = function(promise) {
   return promise.then((x)=>({type:'success',result:x}), (e)=>({type:'failure',error:e}));
@@ -23,7 +25,7 @@ const put_element_over = function(e1, e2) {
 const jsonp = function(url) {
   return new Promise((resolve, reject) => {
     var s = document.createElement('script');
-    global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
+    window.global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
       if(response.type === 'success')
         resolve(response.result);
       else
@@ -50,7 +52,7 @@ const realtime = {
   },
 };
 
-/*global*/ arghablargha = function() {
+window.arghablargha = function() {
   gapi.auth.authorize({
     client_id: CLIENT_ID,
     scope: SCOPES.join(' '),
@@ -135,7 +137,7 @@ var when_done_with_auth_stuff = function() {
     if(r.type === 'failure' && r.error.result.error.errors[0].reason !== 'fileIdInUse')
       throw r.error;
 
-    // Now give write-access to cpmpayroll@cpm.org. This operation should be idemptotent ... I think.
+    // Now give write-access to cpmpayroll@cpm.org. This operation should be idempotent ... I think.
     const action =
       gapi.client.drive.permissions.create({
         fileId: file_id,
