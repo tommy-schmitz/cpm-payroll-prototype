@@ -278,6 +278,16 @@ var when_done_with_auth_stuff = function() {
     const changes_saved_div = document.createElement('div');
     document.body.appendChild(changes_saved_div);
 
+    const button_prev = document.createElement('button');
+    const button_next = document.createElement('button');
+    button_prev.innerText = 'Previous pay period';
+    button_next.innerText = 'Next pay period';
+    document.body.appendChild(button_prev);
+    document.body.appendChild(button_next);
+
+    const which_pp_div = document.createElement('div');
+    document.body.appendChild(which_pp_div);
+
     // Create table
     const table = document.createElement('table');
     table.style.borderCollapse = 'collapse';
@@ -346,6 +356,8 @@ var when_done_with_auth_stuff = function() {
     // Done making the UI.
 
     const update_ui = function() {
+      which_pp_div.innerText = make_pp_name(visible_pp);
+
       const pp_date = pp2date(visible_pp);
       const next_pp_date = pp2date(visible_pp + 1);
       const pp_length = Math.round((next_pp_date - pp_date) / 86400000);
@@ -388,5 +400,15 @@ var when_done_with_auth_stuff = function() {
       else if(doc.saveDelay > 10000)
         changes_saved_div.innerText = 'Your recent changes have not yet been saved ...';
     }, 0);
+
+    // Finish setting up the previous-pay-period and next-pay-period buttons
+    button_prev.addEventListener('click', function(ev) {
+      --visible_pp;
+      update_ui();
+    });
+    button_next.addEventListener('click', function(ev) {
+      ++visible_pp;
+      update_ui();
+    });
   });
 };
