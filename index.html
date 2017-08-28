@@ -1,0 +1,52 @@
+<html>
+<head>
+<meta name="google-signin-client_id"
+      content="663604848714-cdppq8r1sc2sqdt7lu3nc05r4utjr0vf.apps.googleusercontent.com" >
+<script src="https://apis.google.com/js/platform.js"></script>
+<script>
+
+
+const CLIENT_ID = '663604848714-cdppq8r1sc2sqdt7lu3nc05r4utjr0vf.apps.googleusercontent.com';
+
+const NO_OP = new Promise((resolve, reject) => resolve());
+
+// A simple web request protocol similar to XMLHttpRequest:
+const jsonp = function(url) {
+  return new Promise((resolve, reject) => {
+    var s = document.createElement('script');
+    window.global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
+      if(response.type === 'success')
+        resolve(response.result);
+      else if(response.type === 'failure')
+        reject(response.error);
+      else
+        reject('jsonp format error ....');
+    };
+    s.src = url;
+    document.head.appendChild(s);
+    s.remove();
+  });
+};
+
+window.onload = function() {
+};
+
+window.on_sign_in = function(google_user) {
+  document.body.innerText = 'Logging in ...';
+
+  const id_token = google_user.getAuthResponse().id_token;
+
+  NO_OP.then(() => {
+    const action = jsonp('http://localhost:3001/hello?token=' + id_token);
+  return action; }).then((response) => {
+    document.body.innerText = 'Signed in as: ' + response;
+  })
+};
+
+
+</script>
+</head>
+<body>
+<div class="g-signin2" data-onsuccess="on_sign_in"></div>
+</body>
+</html>
