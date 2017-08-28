@@ -356,6 +356,8 @@ var when_done_with_auth_stuff = function() {
     // Done making the UI.
 
     const update_ui = function() {
+      console.log(model.bytesUsed);
+
       which_pp_div.innerText = make_pp_name(visible_pp);
 
       const pp_date = pp2date(visible_pp);
@@ -410,5 +412,28 @@ var when_done_with_auth_stuff = function() {
       ++visible_pp;
       update_ui();
     });
+
+    const stupid = model.createMap();
+    root.set('stupid_file_size_test', stupid);
+
+    gapi.drive.realtime.debug();
+
+/*
+    let i = 0;
+    setTimeout(function recurse() {
+      setTimeout(recurse, 12000);
+
+      const t2 = model.createMap();
+      let t = '';
+      for(let j=0; j<1000; ++j)
+        t += 'aaaaaaaaaaaaaaaaaaaaaaaaaa';
+      for(let j=0; j<100; ++j)
+        t2.set(j + '', model.createString(t));
+      stupid.set(i + '', t2);
+
+      ++i;
+    }, 12000);
+*/
+
   });
 };
