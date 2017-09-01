@@ -45,8 +45,10 @@ const jsonp = function(url) {
     window.global_callback = function(response) {  // Doesn't support multiple concurrent usage of jsonp!
       if(response.type === 'success')
         resolve(response.result);
-      else
+      else if(response.type === 'failure')
         reject(response.error);
+      else
+        reject('jsonp format error ....');
     };
     s.src = url;
     document.head.appendChild(s);
