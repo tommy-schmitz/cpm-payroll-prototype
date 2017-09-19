@@ -191,15 +191,18 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
     const result = document.createElement('div');
 
     for(let j=0; j<columns.length; ++j) {
-      const div = document.createElement('div');
-      div.innerText = columns[j].title;
-      div.style.position = 'absolute';
-      div.style.left     = `${j * 60}px`;
-      div.style.top      = '0px';
-      div.style.width    = '60px';
-      div.style.height   = '30px';
-      div.style.overflow = 'hidden';
-      result.appendChild(div);
+      // Create column heading
+      if(columns[j].title !== undefined) {
+        const div = document.createElement('div');
+        div.innerText = columns[j].title;
+        div.style.position = 'absolute';
+        div.style.left     = `${j * 60}px`;
+        div.style.top      = '0px';
+        div.style.width    = '60px';
+        div.style.height   = '30px';
+        div.style.overflow = 'hidden';
+        result.appendChild(div);
+      }
     }
 
     const len = pp_length(pp);
