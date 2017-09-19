@@ -203,13 +203,25 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
         div.style.overflow = 'hidden';
         result.appendChild(div);
       }
-    }
 
-    const len = pp_length(pp);
-    for(let i=0; i<len; ++i) {
-      for(let j=0; j<columns.length; ++j) {
+      const pp_date = pp2date(pp);
+      const month_number = pp_date.getUTCMonth() + 1;  //+1 because getUTCMonth returns 0-based month number
+      const pp_first_day = pp_date.getUTCDate();
+
+      // Create column cells
+      const len = pp_length(pp);
+      for(let i=0; i<len; ++i) {
         if(columns[j].type === 'approval') {
           continue;
+        } else if(columns[j].type === 'computed_date') {
+          const div = document.createElement('div');
+          div.innerText = month_number + '/' + (pp_first_day + i);
+          div.style.position = 'absolute';
+          div.style.left     = `${j * 60}px`;
+          div.style.top      = `${(i+1) * 30}px`;
+          div.style.width    = '60px';
+          div.style.height   = '30px';
+          result.appendChild(div);
         } else if(columns[j].id === undefined) {
           continue;
         } else {
