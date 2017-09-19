@@ -181,7 +181,7 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
   // Various parts of the UI will subscribe to hear the message from the server
   const subscriptions_2 = {};
   const subscribe_2 = function(cell_id, func) {  // `cell_id` defines which diff structures to listen for
-                                               // `func` takes a diff structure from the server
+                                                 // `func` takes a diff structure from the server
     const list = subscriptions_2[JSON.stringify(cell_id)] = (subscriptions_2[cell_id] || []);
     list.push(func);
   };
@@ -279,7 +279,7 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
         if(diff.cell_id.type === 'grid_data')
           get_grid_widget(diff.cell_id.pp);
 
-        // Dispatch
+        // Dispatch this "update_ui event" to the appropriate list of subscribers.
         const func_list = subscriptions_2[JSON.stringify(diff.cell_id)];
         if(func_list === undefined)
           continue;
