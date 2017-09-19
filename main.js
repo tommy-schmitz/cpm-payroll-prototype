@@ -272,7 +272,14 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
     update_ui(diff_list) {
       for(let i=0; i<diff_list.length; ++i) {
         const diff = diff_list[i];
+
         console.log('got: ' + JSON.stringify(diff));
+
+        // We might need to trigger the lazy-initialization of some potential subscribers, so let's do it ...
+        if(diff.cell_id.type === 'grid_data')
+          get_grid_widget(diff.cell_id.pp);
+
+        // Dispatch
         const func_list = subscriptions_2[JSON.stringify(diff.cell_id)];
         if(func_list === undefined)
           continue;
