@@ -169,20 +169,43 @@ const make_grid_cell_id = function(pp, row_number, column_id) {
   };
 };
 
-// get_grid_widget is a memoized function
-// update_ui takes a message from the server
+// get_grid_widget is a memoized function.
+//      It takes a pay-period-number and returns a div element.
+// collect_ui_diffs should be called when it's time to send data to server.
+//      It takes no args and returns a list of diff objects.
+// update_ui takes a message from the server and uses it to update the UI.
 const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
-  // Various parts of the UI will volunteer to provide data to the server when the master thread dictates
+  // Various parts of the UI will volunteer to provide data to the server when the master thread dictates.
+  // This is used by input elements in the UI so that they can send user-inputted stuff to the server.
   const subscriptions_1 = [];
   const subscribe_1 = function(func) {  // `func` takes a message from the server
     subscriptions_1.push(func);
   };
 
-  // Various parts of the UI will subscribe to hear the message from the server
+  // Various parts of the UI will subscribe to hear the message from the server.
+  // This one is used by most editable cells, which generally listen for updates to just the one specific cell
   const subscriptions_2 = {};
   const subscribe_2 = function(cell_id, func) {  // `cell_id` defines which diff structures to listen for
                                                  // `func` takes a diff structure from the server
-    const list = subscriptions_2[JSON.stringify(cell_id)] = (subscriptions_2[cell_id] || []);
+    const key = JSON.stringify(cell_id);
+    const list = subscriptions_2[key] = (subscriptions_2[key] || []);
+    list.push(func);
+  };
+
+  // (Search for "CODELOC_SUBS3" in this file to find a related code location.)
+  // Various parts of the UI will subscribe to hear the message from the server.
+  // This one is used by approval columns, which generally want to listen for changes to a whole row.
+  // Therefore, these subscribers are notified only when the current doc_version_number is not -1.
+  // This is because when doc_version_number is -1, it means that we are initializing the timesheet.
+  // Approval columns only need to be notified of LATER changes to the cells.
+  // They need these notifications because approval cells should be disabled when row data changes.
+  // Otherwise, supervisors might accidentally approve a row that was recently changed ... without noticing!
+  const subscriptions_3 = {};
+  const subscribe_3 = function(pp, row_number, func) {  // `pp` and `row_number` define which diff structures
+                                                        //   to listen for.
+                                                        // `func` takes no arguments
+    const key = JSON.stringify({pp, row_number});
+    const list = subscriptions_3[key] = (subscriptions_3[key] || []);
     list.push(func);
   };
 
@@ -212,7 +235,65 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
       const len = pp_length(pp);
       for(let i=0; i<len; ++i) {
         if(columns[j].type === 'approval') {
-          continue;
+          let approval_state = null;  // null means not approved. Any other string is an email address.
+                                      // false means not approved and cannot be approved currently.
+          let update = null;  // Initialized later ...
+
+          const loading_div = document.createElement('div');
+          loading_div.innerText = 'loading';
+          const s1 = loading_div.style;  // just for short-hand ...
+          s1.position = 'absolute';
+          s1.left     = `${j * 60}px`;
+          s1.top      = `${(i+1) * 30}px`;
+          s1.width    = '60px';
+          s1.height   = '30px';
+          result.appendChild(loading_div);
+
+          const approve_button_div = document.createElement('div');
+          const s2 = approve_button_div.style;  // just for short-hand ...
+          s2.position = 'absolute';
+          s2.left     = `${j * 60}px`;
+          s2.top      = `${(i+1) * 30}px`;
+          s2.width    = '60px';
+          s2.height   = '30px';
+          const approve_button = document.createElement('button');
+          approve_button.innerText = 'Approve';
+          approve_button_div.appendChild(approve_button);
+
+          const unapprove_button_div = document.createElement('div');
+          const s3 = unapprove_button_div.style;  // just for short-hand ...
+          s3.position = 'absolute';
+          s3.left     = `${j * 60}px`;
+          s3.top      = `${(i+1) * 30}px`;
+          s3.width    = '60px';
+          s3.height   = '30px';
+          const approver_div = document.createElement('div');
+          unapprove_button_div.appendChild(approver_div);
+          const unapprove_button = document.createElement('button');
+          unapprove_button.innerText = 'x';
+          const s4 = unapprove_button.style;  // just for short-hand ...
+          s4.position = 'absolute';
+          s4.right    = '0';
+          s3.top      = '0';
+          s3.width    = '15px';
+          s3.height   = '30px';
+          unapprove_button_div.appendChild(unapprove_button);
+
+          const disabled_div = document.createElement('div');
+          const s5 = disabled_button_div.style;  // just for short-hand ...
+          s5.position = 'absolute';
+          s5.left     = `${j * 60}px`;
+          s5.top      = `${(i+1) * 30}px`;
+          s5.width    = '60px';
+          s5.height   = '30px';
+          const disabled_button = document.createElement('button');
+          disabled_button.innerText = 'Approve';
+          disabled_button.setAttribute('disabled', 'disabled');
+          disabled_div.appendChild(disabled_button);
+
+          subscribe_3(pp, i, function() {
+            
+          });
         } else if(columns[j].type === 'computed_date') {
           const div = document.createElement('div');
           div.innerText = month_number + '/' + (pp_first_day + i);
@@ -281,10 +362,20 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
 
         // Dispatch this "update_ui event" to the appropriate list of subscribers.
         const func_list = subscriptions_2[JSON.stringify(diff.cell_id)];
-        if(func_list === undefined)
-          continue;
-        for(let j=0; j<func_list.length; ++j)
-          func_list[j](diff);
+        if(func_list !== undefined)
+          for(let j=0; j<func_list.length; ++j)
+            func_list[j](diff);
+
+        // (Search for "CODELOC_SUBS3" in this file to find a related code location.)
+        // This if-statement is explained at that other code location.
+        if(doc_version_number !== -1) {
+          // More dispatches
+          const more_funcs =
+              subscriptions_3[JSON.stringify({pp: diff.cell_id.pp, row_number: diff.cell_id.row_number})];
+          if(func_list !== undefined)
+            for(let j=0; j<more_funcs.length; ++j)
+              more_funcs[j](diff);
+        }
       }
     },
   };
