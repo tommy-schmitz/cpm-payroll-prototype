@@ -189,18 +189,31 @@ const make_grid_cell_id = function(pp, row_number, column_id) {
 
 const widget_cache = {};  // See `get_grid_widget` below.
 
-const fingerprint = function(pp, i) {  // `i` is a timesheet grid row number
-  assert(widget_cache[pp] !== undefined);
+const {EMPTY_FINGERPRINT, fingerprint} = (function() {
+  const column_ids = [];
+  for(let j=0; j<columns.length; ++j)
+    if(columns[j].type === 'input')
+      column_ids.push(columns[j].id);
+  column_ids.sort();
 
-  const a = [];
-  for(let j=0; j<columns.length; ++j) {
-    if(columns[j].type !== 'input')
-      continue;
+  const a = ['version 1'];
+  for(let k=0; k<column_ids.length; ++k)
+    a.push([ column_ids[k], '' ]);
+  const EMPTY_FINGERPRINT = JSON.stringify(a);
 
-    a.push(widget_cache[pp].columns[j].rows[i].input.value);
-  }
-  return JSON.stringify(a);
-};
+  return {
+    EMPTY_FINGERPRINT,
+    fingerprint(pp, row_number) {
+      assert(widget_cache[pp] !== undefined);
+      const a = ['version 1'];
+      for(let k=0; k<column_ids.length; ++k) {
+        a.push([ column_ids[k],
+                 widget_cache[pp].columns[column_numbers[column_ids[k]]].rows[row_number].input.value ]);
+      }
+      return JSON.stringify(a);
+    },
+  };
+}());
 
 const update_approval_columns = function(pp, i) {
   const widget = widget_cache[pp];
@@ -210,17 +223,22 @@ const update_approval_columns = function(pp, i) {
 
     const column_id = columns[j].id;
     const scope = widget.columns[j].rows[i];
-    scope.current_div.remove();
-    if(scope.data !== null  &&  scope.data.fingerprint === fingerprint(pp, i)) {
+    if(scope.current_div !== null)
+      scope.current_div.remove();
+    const row_fingerprint = fingerprint(pp, i);
+    if(scope.data !== null  &&  scope.data.fingerprint === row_fingerprint) {
       scope.approver_div.innerText = scope.data.email;
       scope.current_div = scope.unapprove_button_div;
     } else {
-      if(scope.disabled)
+      if(row_fingerprint === EMPTY_FINGERPRINT)
+        scope.current_div = null;
+      else if(scope.disabled)
         scope.current_div = scope.disabled_div;
       else
         scope.current_div = scope.approve_button_div;
     }
-    widget.master.appendChild(scope.current_div);
+    if(scope.current_div !== null)
+      widget.master.appendChild(scope.current_div);
   }
 };
 
@@ -278,17 +296,7 @@ const get_grid_widget = (function() {
         if(columns[j].type === 'approval') {
           scope.data = null;  // Either null or {email: (string), fingerprint: (string)}
           scope.disabled = false;
-
-          const loading_div = document.createElement('div');
-          loading_div.innerText = 'loading';
-          const s1 = loading_div.style;  // just for short-hand ...
-          s1.position = 'absolute';
-          s1.left     = `${j * 60}px`;
-          s1.top      = `${(i+1) * 30}px`;
-          s1.width    = '60px';
-          s1.height   = '30px';
-          master.appendChild(loading_div);
-          scope.current_div = loading_div;
+          scope.current_div = null;
 
           const approve_button_div = document.createElement('div');
           scope.approve_button_div = approve_button_div;
@@ -372,7 +380,6 @@ const get_grid_widget = (function() {
           input.addEventListener('input', function(_) {
             scope.dirty = true;
             disable_approval_cells(pp, i);
-            update_approval_columns(pp, i);
           });
           master.appendChild(input);
         }
@@ -501,19 +508,11 @@ window.onload = async() => {
           // Remove the diff from the list so it's not processed in the next step farther down.
           reply.diffs.splice(k, 1);
 
-          console.log('uh');
-
           const scope = get_grid_widget(pp).columns[j].rows[row_number];
-          if(!scope.dirty)
+          if(!scope.dirty) {
             scope.input.value = diff.value;
-        }
-
-        // Initialize all the approval columns (so they don't say "loading" anymore)
-        for(let pp in widget_cache) {
-          pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
-          const len = pp_length(pp);
-          for(let i=0; i<len; ++i)
-            update_approval_columns(pp, i);
+            update_approval_columns(pp, row_number);
+          }
         }
       }
 
