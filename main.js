@@ -258,7 +258,6 @@ const disable_approval_cells = function(pp, row_number) {
   update_approval_columns(pp, row_number);
 };
 
-let all_changes_saved = true;
 
 // Pick a current-ish pay period.
 const date = new Date();
@@ -276,7 +275,15 @@ document.body.appendChild(sign_in_div);
 const google_user = await sign_in(sign_in_div);
 login_token = google_user.getAuthResponse().id_token;
 
-const all_changes_saved_div = 
+let all_changes_saved = true;
+const all_changes_saved_div = document.createElement('div');
+const update_allchangessaveddiv = () => {
+  if(all_changes_saved === true)
+    all_changes_saved_div.innerText = 'All changes saved in "the cloud"';
+  else  // could be false, could be null
+    all_changes_saved_div.innerText = '...';
+};
+update_allchangessaveddiv();
 
 // get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
 // The memo is `widget_cache`, above. The cache is global because some other code wants to iterate over it.
@@ -332,8 +339,10 @@ const get_grid_widget = (function() {
           approve_button.onclick = function() {
             scope.data = {email: 'loading', fingerprint: fingerprint(pp, i)};
             scope.dirty = true;
-            all_changes_saved = false;
             update_approval_columns(pp, i);
+
+            all_changes_saved = false;
+            update_allchangessaveddiv();
           };
           approve_button_div.appendChild(approve_button);
 
@@ -360,8 +369,10 @@ const get_grid_widget = (function() {
           unapprove_button.onclick = function() {
             scope.data = null;
             scope.dirty = true;
-            all_changes_saved = false;
             update_approval_columns(pp, i);
+
+            all_changes_saved = false;
+            update_allchangessaveddiv();
           };
           unapprove_button_div.appendChild(unapprove_button);
 
@@ -402,8 +413,10 @@ const get_grid_widget = (function() {
           scope.dirty = false;
           input.addEventListener('input', function(_) {
             scope.dirty = true;
-            all_changes_saved = false;
             disable_approval_cells(pp, i);
+
+            all_changes_saved = false;
+            update_allchangessaveddiv();
           });
           master.appendChild(input);
         }
@@ -467,7 +480,8 @@ for(;;) {
       diffs: [],
     };
     const prev_allchangessaved = all_changes_saved;
-    all_changes_saved = null;  // null means we're currently waiting for the server to confirm receipt.
+    if(all_changes_saved === false)
+      all_changes_saved = null;  // null means we're currently waiting for the server to confirm receipt.
     // If we fail to communicate with the server, then we'll want to re-dirty-ify the cells
     // that we've un-dirty-ified in this upcoming loop. Thus, we remember them in `rollback_tasks`.
     const rollback_tasks = [() => {all_changes_saved = prev_allchangessaved;}];
@@ -553,8 +567,10 @@ for(;;) {
       }
     }
 
-    if(all_changes_saved === null)  // It could be false by now, due to user edits in the meantime.
+    if(all_changes_saved === null) {  // It could be false by now, due to user edits in the meantime.
       all_changes_saved = true;
+      update_allchangessaveddiv();
+    }
 
   } catch(e) {
     console.error(e);
