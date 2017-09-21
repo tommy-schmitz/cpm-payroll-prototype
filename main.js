@@ -310,7 +310,7 @@ const get_grid_widget = (function() {
           approve_button.innerText = 'Approve';
           approve_button.style.width = '60px';
           approve_button.onclick = function() {
-            scope.data = {email: 'unknown', fingerprint: fingerprint(pp, i)};
+            scope.data = {email: 'loading', fingerprint: fingerprint(pp, i)};
             scope.dirty = true;
             update_approval_columns(pp, i);
           };
@@ -324,6 +324,7 @@ const get_grid_widget = (function() {
           s3.top      = `${(i+1) * 30}px`;
           s3.width    = '60px';
           s3.height   = '30px';
+          s3.overflow = 'hidden';
           const approver_div = document.createElement('div');
           scope.approver_div = approver_div;
           unapprove_button_div.appendChild(approver_div);
