@@ -448,6 +448,9 @@ window.onload = async() => {
         doc_version_number,
         diffs: [],
       };
+      // If we fail to communicate with the server, then we'll want to re-dirty-ify the cells
+      // that we've un-dirty-ified in this upcoming loop. Thus, we remember them in `rollback_tasks`.
+      const rollback_tasks = [];
       for(let pp in widget_cache) {
         pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
 
@@ -458,20 +461,29 @@ window.onload = async() => {
           const len = pp_length(pp);
           for(let i=0; i<len; ++i) {
             const scope = widget_cache[pp].columns[j].rows[i];
-            if(scope.dirty) {
-              const value = (columns[j].type === 'input' ? scope.input.value : scope.data);
-              msg.diffs.push({
-                cell_id: make_grid_cell_id(pp, i, columns[j].id),
-                value: value,
-              });
-            }
+            if(!scope.dirty)
+              continue;
+
+            const value = (columns[j].type === 'input' ? scope.input.value : scope.data);
+            msg.diffs.push({
+              cell_id: make_grid_cell_id(pp, i, columns[j].id),
+              value: value,
+            });
             scope.dirty = false;
+            rollback_tasks.push(() => {scope.dirty = true;});
           }
         }
       }
 
       // Talk to the server
-      const reply = await to_server(msg);
+      let reply = null;
+      try {
+        reply = await to_server(msg);
+      } catch(e) {
+        for(let k=0; k<rollback_tasks.length; ++k)
+          rollback_tasks[k]();
+        throw e;
+      }
 
       // If this is the first reply we've gotten, then we should treat the approval diffs specially.
       if(doc_version_number === -1) {
