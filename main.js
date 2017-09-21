@@ -344,6 +344,7 @@ const get_grid_widget = (function() {
           s5.height   = '30px';
           const disabled_button = document.createElement('button');
           disabled_button.innerText = 'Approve';
+          disabled_button.style.width = '60px';
           disabled_button.setAttribute('disabled', 'disabled');
           disabled_button.setAttribute('title',
               'This row has changed recently. Please refresh the page before approving.' );
