@@ -7,6 +7,7 @@ const sleep = (millis) => new Promise((resolve, reject) => {
 });
 
 const pp2date = function(pp) {  // Returns the beginning of the day at the beginning of the pay period, UTC
+  assert(pp === (pp | 0));  // Verify that `pp` is an integer.
   const year_code = Math.floor(pp / 24);
   const year = year_code + 1970;
   const pp_code = pp - 24 * year_code;
@@ -16,6 +17,7 @@ const pp2date = function(pp) {  // Returns the beginning of the day at the begin
   return new Date(Date.UTC(year, month, day));
 };
 const make_pp_name = function(pp) {
+  assert(pp === (pp | 0));  // Verify that `pp` is an integer.
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const date = pp2date(pp);
   assert(date.getUTCDate() === 1  ||  date.getUTCDate() === 16);
@@ -23,6 +25,7 @@ const make_pp_name = function(pp) {
   return MONTHS[date.getUTCMonth()] + date_range + date.getUTCFullYear();
 };
 const pp_length = function(pp) {
+  assert(pp === (pp | 0));  // Verify that `pp` is an integer. This screwed me once before ...
   return Math.round((pp2date(pp+1) - pp2date(pp)) / 86400000);
 };
 
