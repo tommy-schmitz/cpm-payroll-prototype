@@ -260,6 +260,21 @@ const disable_approval_cells = function(pp, row_number) {
 
 let all_changes_saved = true;
 
+// Pick a current-ish pay period.
+const date = new Date();
+let visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
+
+window.onload = async() => {
+
+
+const sign_in_div = document.createElement('div');
+document.body.innerText = 'Please sign in to view your timesheet.';
+document.body.appendChild(document.createElement('br'));
+document.body.appendChild(sign_in_div);
+
+const google_user = await sign_in(sign_in_div);
+login_token = google_user.getAuthResponse().id_token;
+
 // get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
 // The memo is `widget_cache`, above. The cache is global because some other code wants to iterate over it.
 const get_grid_widget = (function() {
@@ -401,21 +416,6 @@ const get_grid_widget = (function() {
     return widget_cache[pp];
   };
 }());
-
-// Pick a current-ish pay period.
-const date = new Date();
-let visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
-
-window.onload = async() => {
-
-
-const sign_in_div = document.createElement('div');
-document.body.innerText = 'Please sign in to view your timesheet.';
-document.body.appendChild(document.createElement('br'));
-document.body.appendChild(sign_in_div);
-
-const google_user = await sign_in(sign_in_div);
-login_token = google_user.getAuthResponse().id_token;
 
 const container = document.createElement('div');
 container.style.position = 'relative';
