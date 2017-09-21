@@ -85,42 +85,50 @@ const columns = [
     title: 'Date',
   },
   {
-    type: 'input_text',
+    type: 'input',
+    input_type: 'text',
     id: 'description',
     title: 'Duties - Describe Briefly',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'worked_hours',
     title: 'Daily Hours Worked',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'holiday_hours',
     title: 'Holiday Hours',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'vacation_hours',
     title: 'Vacation Hours',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'flex_hours',
     title: 'Makeup (Flex) Hours',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'sick_hours',
     title: 'Sick Hours',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'jury_hours',
     title: 'Jury Hours',
   },
   {
-    type: 'input_hours',
+    type: 'input',
+    input_type: 'hours',
     id: 'bereavement_hours',
     title: 'Bereavement Hours',
   },
@@ -140,12 +148,14 @@ const columns = [
   },
   {type: 'blank'},
   {
-    type: 'input_time',
+    type: 'input',
+    input_type: 'time',
     id: 'start_lunch',
     title: 'Start Lunch',
   },
   {
-    type: 'input_time',
+    type: 'input',
+    input_type: 'time',
     id: 'end_lunch',
     title: 'End Lunch',
   },
@@ -154,11 +164,16 @@ const columns = [
     title: 'Lunch Period',
   },
   {
-    type: 'input_yes_no',
+    type: 'input',
+    input_type: 'yes_no',
     id: 'rest_period_observed',
     title: 'Rest period(s) observed',
   },
 ];
+const column_numbers = {};
+for(let j=0; j<columns.length; ++j)
+  if(columns[j].id !== undefined)
+    column_numbers[columns[j].id] = j;
 
 const make_grid_cell_id = function(pp, row_number, column_id) {
   return {
@@ -169,51 +184,60 @@ const make_grid_cell_id = function(pp, row_number, column_id) {
   };
 };
 
-// get_grid_widget is a memoized function.
-//      It takes a pay-period-number and returns a div element.
-// collect_ui_diffs should be called when it's time to send data to server.
-//      It takes no args and returns a list of diff objects.
-// update_ui takes a message from the server and uses it to update the UI.
-const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
-  // Various parts of the UI will volunteer to provide data to the server when the master thread dictates.
-  // This is used by input elements in the UI so that they can send user-inputted stuff to the server.
-  const subscriptions_1 = [];
-  const subscribe_1 = function(func) {  // `func` takes a message from the server
-    subscriptions_1.push(func);
-  };
+const widget_cache = {};  // See `get_grid_widget` below.
 
-  // Various parts of the UI will subscribe to hear the message from the server.
-  // This one is used by most editable cells, which generally listen for updates to just the one specific cell
-  const subscriptions_2 = {};
-  const subscribe_2 = function(cell_id, func) {  // `cell_id` defines which diff structures to listen for
-                                                 // `func` takes a diff structure from the server
-    const key = JSON.stringify(cell_id);
-    const list = subscriptions_2[key] = (subscriptions_2[key] || []);
-    list.push(func);
-  };
+const fingerprint = function(pp, i) {  // `i` is a timesheet grid row number
+  assert(widget_cache[pp] !== undefined);
 
-  // (Search for "CODELOC_SUBS3" in this file to find a related code location.)
-  // Various parts of the UI will subscribe to hear the message from the server.
-  // This one is used by approval columns, which generally want to listen for changes to a whole row.
-  // Therefore, these subscribers are notified only when the current doc_version_number is not -1.
-  // This is because when doc_version_number is -1, it means that we are initializing the timesheet.
-  // Approval columns only need to be notified of LATER changes to the cells.
-  // They need these notifications because approval cells should be disabled when row data changes.
-  // Otherwise, supervisors might accidentally approve a row that was recently changed ... without noticing!
-  const subscriptions_3 = {};
-  const subscribe_3 = function(pp, row_number, func) {  // `pp` and `row_number` define which diff structures
-                                                        //   to listen for.
-                                                        // `func` takes no arguments
-    const key = JSON.stringify({pp, row_number});
-    const list = subscriptions_3[key] = (subscriptions_3[key] || []);
-    list.push(func);
-  };
+  let result = '';
+  for(let j=0; j<columns.length; ++j) {
+    if(columns[j].type !== 'input')
+      continue;
 
-  // Constructs a widget and returns the root div
-  const make_a_new_one = function(pp) {
-    const result = document.createElement('div');
+    result += widget_cache[pp].columns[j].rows[i].input.value;
+  }
+};
 
+const update_approval_columns = function() {
+  for(let pp in widget_cache) {
+    pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
+    const widget = widget_cache[pp];
     for(let j=0; j<columns.length; ++j) {
+      if(columns[j].type !== 'approval')
+        continue;
+
+      const column_id = columns[j].id;
+      const len = pp_length(pp);
+      for(let i=0; i<len; ++i) {
+        const scope = widget.columns[j].rows[i];
+        scope.current_div.remove();
+        if(scope.data !== null  &&  scope.data.fingerprint === fingerprint(pp, i)) {
+          scope.approver_div.innerText = scope.data.email;
+          scope.current_div = scope.unapprove_button_div;
+        } else {
+          if(scope.disabled)
+            scope.current_div = scope.disabled_div;
+          else
+            scope.current_div = scope.approve_button_div;
+        }
+        widget.master.appendChild(scope.current_div);
+      }
+    }
+  }
+};
+
+// get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
+// The memo is `widget_cache`, above. The cache is global because some other code wants to iterate over it.
+const get_grid_widget = (function() {
+  // Constructs a widget and returns a nice data structure describing lots of stuff about it.
+  const make_a_new_one = function(pp) {
+    const result = {};
+    const master = result.master = document.createElement('div');
+
+    result.columns = [];
+    for(let j=0; j<columns.length; ++j) {
+      const column_id = columns[j].id;
+
       // Create column heading
       if(columns[j].title !== undefined) {
         const div = document.createElement('div');
@@ -224,20 +248,22 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
         div.style.width    = '60px';
         div.style.height   = '30px';
         div.style.overflow = 'hidden';
-        result.appendChild(div);
+        master.appendChild(div);
       }
 
       const pp_date = pp2date(pp);
       const month_number = pp_date.getUTCMonth() + 1;  //+1 because getUTCMonth returns 0-based month number
       const pp_first_day = pp_date.getUTCDate();
 
-      // Create column cells
+      result.columns.push({rows: []});
       const len = pp_length(pp);
       for(let i=0; i<len; ++i) {
+        const scope = {};
+        result.columns[j].rows.push(scope);
+
         if(columns[j].type === 'approval') {
-          let approval_state = null;  // null means not approved. Any other string is an email address.
-                                      // false means not approved and cannot be approved currently.
-          let update = null;  // Initialized later ...
+          scope.data = null;  // Either null or {email: (string), fingerprint: (string)}
+          scope.disabled = false;
 
           const loading_div = document.createElement('div');
           loading_div.innerText = 'loading';
@@ -247,9 +273,11 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
           s1.top      = `${(i+1) * 30}px`;
           s1.width    = '60px';
           s1.height   = '30px';
-          result.appendChild(loading_div);
+          master.appendChild(loading_div);
+          scope.current_div = loading_div;
 
           const approve_button_div = document.createElement('div');
+          scope.approve_button_div = approve_button_div;
           const s2 = approve_button_div.style;  // just for short-hand ...
           s2.position = 'absolute';
           s2.left     = `${j * 60}px`;
@@ -258,9 +286,16 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
           s2.height   = '30px';
           const approve_button = document.createElement('button');
           approve_button.innerText = 'Approve';
+          approve_button.style.width = '60px';
+          approve_button.onclick = function() {
+            scope.data = {email: 'unknown', fingerprint: fingerprint(pp, i)};
+            scope.dirty = true;
+            update_approval_columns();
+          };
           approve_button_div.appendChild(approve_button);
 
           const unapprove_button_div = document.createElement('div');
+          scope.unapprove_button_div = unapprove_button_div;
           const s3 = unapprove_button_div.style;  // just for short-hand ...
           s3.position = 'absolute';
           s3.left     = `${j * 60}px`;
@@ -268,19 +303,26 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
           s3.width    = '60px';
           s3.height   = '30px';
           const approver_div = document.createElement('div');
+          scope.approver_div = approver_div;
           unapprove_button_div.appendChild(approver_div);
           const unapprove_button = document.createElement('button');
           unapprove_button.innerText = 'x';
           const s4 = unapprove_button.style;  // just for short-hand ...
           s4.position = 'absolute';
           s4.right    = '0';
-          s3.top      = '0';
-          s3.width    = '15px';
-          s3.height   = '30px';
+          s4.top      = '0';
+          s4.width    = '15px';
+          s4.height   = '30px';
+          unapprove_button.onclick = function() {
+            scope.data = null;
+            scope.dirty = true;
+            update_approval_columns();
+          };
           unapprove_button_div.appendChild(unapprove_button);
 
           const disabled_div = document.createElement('div');
-          const s5 = disabled_button_div.style;  // just for short-hand ...
+          scope.disabled_div = disabled_div;
+          const s5 = disabled_div.style;  // just for short-hand ...
           s5.position = 'absolute';
           s5.left     = `${j * 60}px`;
           s5.top      = `${(i+1) * 30}px`;
@@ -289,11 +331,9 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
           const disabled_button = document.createElement('button');
           disabled_button.innerText = 'Approve';
           disabled_button.setAttribute('disabled', 'disabled');
+          disabled_button.setAttribute('title',
+              'This row has changed recently. Please refresh the page before approving.' );
           disabled_div.appendChild(disabled_button);
-
-          subscribe_3(pp, i, function() {
-            
-          });
         } else if(columns[j].type === 'computed_date') {
           const div = document.createElement('div');
           div.innerText = month_number + '/' + (pp_first_day + i);
@@ -302,84 +342,51 @@ const {get_grid_widget, collect_ui_diffs, update_ui} = (function() {
           div.style.top      = `${(i+1) * 30}px`;
           div.style.width    = '60px';
           div.style.height   = '30px';
-          result.appendChild(div);
+          master.appendChild(div);
         } else if(columns[j].id === undefined) {
-          continue;
+          // do nothing
         } else {
-          const column_id = columns[j].id;
           const input = document.createElement('input')
+          scope.input = input;
           input.style.position = 'absolute';
           input.style.left     = `${j * 60}px`;
           input.style.top      = `${(i+1) * 30}px`;
           input.style.width    = '60px';
           input.style.height   = '30px';
-          let dirty = false;
+          scope.dirty = false;
           input.addEventListener('input', function(_) {
-            dirty = true;
+            scope.dirty = true;
+            update_approval_columns();
           });
-          subscribe_1((diffs) => {
-            if(dirty)
-              diffs.push({
-                cell_id: make_grid_cell_id(pp, i, column_id),
-                value: input.value,
-              });
-            dirty = false;
-          });
-          subscribe_2(make_grid_cell_id(pp, i, column_id), (diff) => {
-            if(!dirty)
-              input.value = diff.value;
-          });
-          result.appendChild(input);
+          master.appendChild(input);
         }
       }
     }
     return result;
   };
 
-  const cache = {};  // This maps pay period numbers to root div of widget
-
-  return {
-    get_grid_widget(pp) {
-      if(cache[pp] === undefined)
-        cache[pp] = make_a_new_one(pp);
-      return cache[pp];
-    },
-    collect_ui_diffs() {
-      const result = [];
-      for(let i=0; i<subscriptions_1.length; ++i)
-        subscriptions_1[i](result);
-      return result;
-    },
-    update_ui(diff_list) {
-      for(let i=0; i<diff_list.length; ++i) {
-        const diff = diff_list[i];
-
-        console.log('got: ' + JSON.stringify(diff));
-
-        // We might need to trigger the lazy-initialization of some potential subscribers, so let's do it ...
-        if(diff.cell_id.type === 'grid_data')
-          get_grid_widget(diff.cell_id.pp);
-
-        // Dispatch this "update_ui event" to the appropriate list of subscribers.
-        const func_list = subscriptions_2[JSON.stringify(diff.cell_id)];
-        if(func_list !== undefined)
-          for(let j=0; j<func_list.length; ++j)
-            func_list[j](diff);
-
-        // (Search for "CODELOC_SUBS3" in this file to find a related code location.)
-        // This if-statement is explained at that other code location.
-        if(doc_version_number !== -1) {
-          // More dispatches
-          const more_funcs =
-              subscriptions_3[JSON.stringify({pp: diff.cell_id.pp, row_number: diff.cell_id.row_number})];
-          if(func_list !== undefined)
-            for(let j=0; j<more_funcs.length; ++j)
-              more_funcs[j](diff);
-        }
-      }
-    },
+  // Here is the memoized function.
+  return function(pp) {
+    if(widget_cache[pp] === undefined)
+      widget_cache[pp] = make_a_new_one(pp);
+    return widget_cache[pp];
   };
 }());
+
+const disable_approval_cells = function(pp, row_number) {
+  for(let j=0; j<columns.length; ++j) {
+    if(columns[j].type !== 'approval')
+      continue;
+
+    const column_id = columns[j].id;
+    const widget = get_grid_widget(pp);
+    const scope = widget.columns[j].rows[row_number];
+
+    scope.disabled = true;
+  }
+
+  update_approval_columns();
+};
 
 // Pick a current-ish pay period.
 const date = new Date();
@@ -398,7 +405,7 @@ window.onload = async() => {
   container.style.position = 'relative';
   container.style.font = '10px sans-serif';
   const update_container = function() {
-    container.innerHTML = '';   container.appendChild(get_grid_widget(visible_pp));
+    container.innerHTML = '';   container.appendChild(get_grid_widget(visible_pp).master);
   };
   update_container();
 
@@ -429,19 +436,94 @@ window.onload = async() => {
   document.body.appendChild(container);
 
   let doc_version_number = -1;
+
+  // Continually send requests to the server, thus synchronizing data in both places.
   for(;;) {
-    try {
+    try {  // Don't allow errors to stop us!
+
+      // Tell the server about stuff that has been changed by the user.
       const msg = {
         type: 'sync',
         doc_version_number,
-        diffs: collect_ui_diffs(),
+        diffs: [],
       };
+      for(let pp in widget_cache) {
+        pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
+
+        for(let j=0; j<columns.length; ++j) {
+          if(columns[j].type !== 'input'  &&  columns[j].type !== 'approval')
+            continue;
+
+          const len = pp_length(pp);
+          for(let i=0; i<len; ++i) {
+            const scope = widget_cache[pp].columns[j].rows[i];
+            if(scope.dirty) {
+              const value = (columns[j].type === 'input' ? scope.input.value : scope.data);
+              msg.diffs.push({
+                cell_id: make_grid_cell_id(pp, i, columns[j].id),
+                value: value,
+              });
+            }
+            scope.dirty = false;
+          }
+        }
+      }
+
+      // Talk to the server
       const reply = await to_server(msg);
+
+      // If this is the first reply we've gotten, then we should treat the approval diffs specially.
+      if(doc_version_number === -1) {
+        for(let k=reply.diffs.length-1; k>=0; --k) {  // Iterate backwards so we can delete as we go.
+          const diff = reply.diffs[k];
+
+          // Filter out just the input diffs
+          if(diff.cell_id.type !== 'grid_data')
+            continue;
+          const {pp, column_id, row_number} = diff.cell_id;
+          const j = column_numbers[column_id];
+          if(columns[j].type !== 'input')
+            continue;
+
+          // Remove the diff from the list so it's not processed in the next step farther down.
+          reply.diffs.splice(k, 1);
+
+          console.log('uh');
+
+          const scope = get_grid_widget(pp).columns[j].rows[row_number];
+          if(!scope.dirty)
+            scope.input.value = diff.value;
+        }
+      }
+
       doc_version_number = reply.doc_version_number;
-      update_ui(reply.diffs);
+
+      // Update the UI according to what the server said has changed.
+      for(let diff of reply.diffs) {
+        if(diff.cell_id.type !== 'grid_data')
+          throw 'unimplemented diff type: ' + diff.cell_id.type;
+
+        const {pp, column_id, row_number} = diff.cell_id;
+        const widget = get_grid_widget(pp);
+        const j = column_numbers[column_id];
+        const scope = widget.columns[j].rows[row_number];
+
+        // Update the UI to show the new value of the cell.
+        if(columns[j].type === 'input') {
+          if(!scope.dirty)
+            scope.input.value = diff.value;
+
+          disable_approval_cells(pp, row_number);  // This helps prevent erroneous approvals.
+        } else if(columns[j].type === 'approval') {
+          scope.data = diff.value;
+        }
+      }
+      update_approval_columns();
+
     } catch(e) {
       console.error(e);
     }
+
     await sleep(Math.floor(Math.random() * 2000) + 2000);  // Sleep for a few seconds
   }
 };
