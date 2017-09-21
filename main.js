@@ -192,41 +192,52 @@ const widget_cache = {};  // See `get_grid_widget` below.
 const fingerprint = function(pp, i) {  // `i` is a timesheet grid row number
   assert(widget_cache[pp] !== undefined);
 
-  let result = '';
+  const a = [];
   for(let j=0; j<columns.length; ++j) {
     if(columns[j].type !== 'input')
       continue;
 
-    result += widget_cache[pp].columns[j].rows[i].input.value;
+    a.push(widget_cache[pp].columns[j].rows[i].input.value);
+  }
+  return JSON.stringify(a);
+};
+
+const update_approval_columns = function(pp, i) {
+  const widget = widget_cache[pp];
+  for(let j=0; j<columns.length; ++j) {
+    if(columns[j].type !== 'approval')
+      continue;
+
+    const column_id = columns[j].id;
+    const scope = widget.columns[j].rows[i];
+    scope.current_div.remove();
+    if(scope.data !== null  &&  scope.data.fingerprint === fingerprint(pp, i)) {
+      scope.approver_div.innerText = scope.data.email;
+      scope.current_div = scope.unapprove_button_div;
+    } else {
+      if(scope.disabled)
+        scope.current_div = scope.disabled_div;
+      else
+        scope.current_div = scope.approve_button_div;
+    }
+    widget.master.appendChild(scope.current_div);
   }
 };
 
-const update_approval_columns = function() {
-  for(let pp in widget_cache) {
-    pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
-    const widget = widget_cache[pp];
-    for(let j=0; j<columns.length; ++j) {
-      if(columns[j].type !== 'approval')
-        continue;
+const disable_approval_cells = function(pp, row_number) {
+  for(let j=0; j<columns.length; ++j) {
+    if(columns[j].type !== 'approval')
+      continue;
 
-      const column_id = columns[j].id;
-      const len = pp_length(pp);
-      for(let i=0; i<len; ++i) {
-        const scope = widget.columns[j].rows[i];
-        scope.current_div.remove();
-        if(scope.data !== null  &&  scope.data.fingerprint === fingerprint(pp, i)) {
-          scope.approver_div.innerText = scope.data.email;
-          scope.current_div = scope.unapprove_button_div;
-        } else {
-          if(scope.disabled)
-            scope.current_div = scope.disabled_div;
-          else
-            scope.current_div = scope.approve_button_div;
-        }
-        widget.master.appendChild(scope.current_div);
-      }
-    }
+    const column_id = columns[j].id;
+    const widget = widget_cache[pp];
+    assert(widget !== undefined);
+    const scope = widget.columns[j].rows[row_number];
+
+    scope.disabled = true;
   }
+
+  update_approval_columns(pp, row_number);
 };
 
 // get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
@@ -293,7 +304,7 @@ const get_grid_widget = (function() {
           approve_button.onclick = function() {
             scope.data = {email: 'unknown', fingerprint: fingerprint(pp, i)};
             scope.dirty = true;
-            update_approval_columns();
+            update_approval_columns(pp, i);
           };
           approve_button_div.appendChild(approve_button);
 
@@ -319,7 +330,7 @@ const get_grid_widget = (function() {
           unapprove_button.onclick = function() {
             scope.data = null;
             scope.dirty = true;
-            update_approval_columns();
+            update_approval_columns(pp, i);
           };
           unapprove_button_div.appendChild(unapprove_button);
 
@@ -359,7 +370,8 @@ const get_grid_widget = (function() {
           scope.dirty = false;
           input.addEventListener('input', function(_) {
             scope.dirty = true;
-            update_approval_columns();
+            disable_approval_cells(pp, i);
+            update_approval_columns(pp, i);
           });
           master.appendChild(input);
         }
@@ -375,21 +387,6 @@ const get_grid_widget = (function() {
     return widget_cache[pp];
   };
 }());
-
-const disable_approval_cells = function(pp, row_number) {
-  for(let j=0; j<columns.length; ++j) {
-    if(columns[j].type !== 'approval')
-      continue;
-
-    const column_id = columns[j].id;
-    const widget = get_grid_widget(pp);
-    const scope = widget.columns[j].rows[row_number];
-
-    scope.disabled = true;
-  }
-
-  update_approval_columns();
-};
 
 // Pick a current-ish pay period.
 const date = new Date();
@@ -497,6 +494,14 @@ window.onload = async() => {
           if(!scope.dirty)
             scope.input.value = diff.value;
         }
+
+        // Initialize all the approval columns (so they don't say "loading" anymore)
+        for(let pp in widget_cache) {
+          pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
+          const len = pp_length(pp);
+          for(let i=0; i<len; ++i)
+            update_approval_columns(pp, i);
+        }
       }
 
       doc_version_number = reply.doc_version_number;
@@ -519,9 +524,9 @@ window.onload = async() => {
           disable_approval_cells(pp, row_number);  // This helps prevent erroneous approvals.
         } else if(columns[j].type === 'approval') {
           scope.data = diff.value;
+          update_approval_columns(pp, row_number);
         }
       }
-      update_approval_columns();
 
     } catch(e) {
       console.error(e);
