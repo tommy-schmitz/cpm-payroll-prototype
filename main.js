@@ -264,6 +264,7 @@ let all_changes_saved = true;
 const date = new Date();
 let visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
 
+
 window.onload = async() => {
 
 
@@ -274,6 +275,8 @@ document.body.appendChild(sign_in_div);
 
 const google_user = await sign_in(sign_in_div);
 login_token = google_user.getAuthResponse().id_token;
+
+const all_changes_saved_div = 
 
 // get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
 // The memo is `widget_cache`, above. The cache is global because some other code wants to iterate over it.
@@ -429,9 +432,6 @@ const which_pp_div = document.createElement('div');
 const update_whichppdiv = () => {which_pp_div.innerText = make_pp_name(visible_pp);};
 update_whichppdiv();
 
-const all_changes_saved_div = 
-document.body.appendChild(all_changes_saved_div);
-
 const prev_pp_button = document.createElement('button');
 prev_pp_button.innerText = 'Previous pay period';
 prev_pp_button.onclick = () => {
@@ -439,7 +439,6 @@ prev_pp_button.onclick = () => {
   update_container();
   update_whichppdiv();
 };
-document.body.appendChild(prev_pp_button);
 
 const next_pp_button = document.createElement('button');
 next_pp_button.innerText = 'Next pay period';
@@ -448,10 +447,11 @@ next_pp_button.onclick = () => {
   update_container();
   update_whichppdiv();
 };
+
+document.body.appendChild(all_changes_saved_div);
+document.body.appendChild(prev_pp_button);
 document.body.appendChild(next_pp_button);
-
 document.body.appendChild(which_pp_div);
-
 document.body.appendChild(container);
 
 let doc_version_number = -1;
