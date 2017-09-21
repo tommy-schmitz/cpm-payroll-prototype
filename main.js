@@ -407,157 +407,161 @@ const date = new Date();
 let visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
 
 window.onload = async() => {
-  const sign_in_div = document.createElement('div');
-  document.body.innerText = 'Please sign in to view your timesheet.';
-  document.body.appendChild(document.createElement('br'));
-  document.body.appendChild(sign_in_div);
 
-  const google_user = await sign_in(sign_in_div);
-  login_token = google_user.getAuthResponse().id_token;
 
-  const container = document.createElement('div');
-  container.style.position = 'relative';
-  container.style.font = '10px sans-serif';
-  const update_container = function() {
-    container.innerHTML = '';   container.appendChild(get_grid_widget(visible_pp).master);
-  };
+const sign_in_div = document.createElement('div');
+document.body.innerText = 'Please sign in to view your timesheet.';
+document.body.appendChild(document.createElement('br'));
+document.body.appendChild(sign_in_div);
+
+const google_user = await sign_in(sign_in_div);
+login_token = google_user.getAuthResponse().id_token;
+
+const container = document.createElement('div');
+container.style.position = 'relative';
+container.style.font = '10px sans-serif';
+const update_container = function() {
+  container.innerHTML = '';   container.appendChild(get_grid_widget(visible_pp).master);
+};
+update_container();
+
+const which_pp_div = document.createElement('div');
+const update_whichppdiv = () => {which_pp_div.innerText = make_pp_name(visible_pp);};
+update_whichppdiv();
+
+const all_changes_saved_div = 
+document.body.appendChild(all_changes_saved_div);
+
+const prev_pp_button = document.createElement('button');
+prev_pp_button.innerText = 'Previous pay period';
+prev_pp_button.onclick = () => {
+  --visible_pp;
   update_container();
-
-  const which_pp_div = document.createElement('div');
-  const update_whichppdiv = () => {which_pp_div.innerText = make_pp_name(visible_pp);};
   update_whichppdiv();
+};
+document.body.appendChild(prev_pp_button);
 
-  const all_changes_saved_div = 
-  document.body.appendChild(all_changes_saved_div);
+const next_pp_button = document.createElement('button');
+next_pp_button.innerText = 'Next pay period';
+next_pp_button.onclick = () => {
+  ++visible_pp;
+  update_container();
+  update_whichppdiv();
+};
+document.body.appendChild(next_pp_button);
 
-  const prev_pp_button = document.createElement('button');
-  prev_pp_button.innerText = 'Previous pay period';
-  prev_pp_button.onclick = () => {
-    --visible_pp;
-    update_container();
-    update_whichppdiv();
-  };
-  document.body.appendChild(prev_pp_button);
+document.body.appendChild(which_pp_div);
 
-  const next_pp_button = document.createElement('button');
-  next_pp_button.innerText = 'Next pay period';
-  next_pp_button.onclick = () => {
-    ++visible_pp;
-    update_container();
-    update_whichppdiv();
-  };
-  document.body.appendChild(next_pp_button);
+document.body.appendChild(container);
 
-  document.body.appendChild(which_pp_div);
+let doc_version_number = -1;
 
-  document.body.appendChild(container);
+// Continually send requests to the server, thus synchronizing data in both places.
+for(;;) {
+  try {  // Don't allow errors to stop us!
 
-  let doc_version_number = -1;
+    // Tell the server about stuff that has been changed by the user.
+    const msg = {
+      type: 'sync',
+      doc_version_number,
+      diffs: [],
+    };
+    const prev_allchangessaved = all_changes_saved;
+    all_changes_saved = null;  // null means we're currently waiting for the server to confirm receipt.
+    // If we fail to communicate with the server, then we'll want to re-dirty-ify the cells
+    // that we've un-dirty-ified in this upcoming loop. Thus, we remember them in `rollback_tasks`.
+    const rollback_tasks = [() => {all_changes_saved = prev_allchangessaved;}];
+    for(let pp in widget_cache) {
+      pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
 
-  // Continually send requests to the server, thus synchronizing data in both places.
-  for(;;) {
-    try {  // Don't allow errors to stop us!
+      for(let j=0; j<columns.length; ++j) {
+        if(columns[j].type !== 'input'  &&  columns[j].type !== 'approval')
+          continue;
 
-      // Tell the server about stuff that has been changed by the user.
-      const msg = {
-        type: 'sync',
-        doc_version_number,
-        diffs: [],
-      };
-      const prev_allchangessaved = all_changes_saved;
-      all_changes_saved = null;  // null means we're currently waiting for the server to confirm receipt.
-      // If we fail to communicate with the server, then we'll want to re-dirty-ify the cells
-      // that we've un-dirty-ified in this upcoming loop. Thus, we remember them in `rollback_tasks`.
-      const rollback_tasks = [() => {all_changes_saved = prev_allchangessaved;}];
-      for(let pp in widget_cache) {
-        pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
-
-        for(let j=0; j<columns.length; ++j) {
-          if(columns[j].type !== 'input'  &&  columns[j].type !== 'approval')
-            continue;
-
-          const len = pp_length(pp);
-          for(let i=0; i<len; ++i) {
-            const scope = widget_cache[pp].columns[j].rows[i];
-            if(!scope.dirty)
-              continue;
-
-            const value = (columns[j].type === 'input' ? scope.input.value : scope.data);
-            msg.diffs.push({
-              cell_id: make_grid_cell_id(pp, i, columns[j].id),
-              value: value,
-            });
-            scope.dirty = false;
-            rollback_tasks.push(() => {scope.dirty = true;});
-          }
-        }
-      }
-
-      // Talk to the server
-      let reply = null;
-      try {
-        reply = await to_server(msg);
-      } catch(e) {
-        for(let k=0; k<rollback_tasks.length; ++k)
-          rollback_tasks[k]();
-        throw e;
-      }
-
-      // If this is the first reply we've gotten, then we should treat the approval diffs specially.
-      if(doc_version_number === -1) {
-        for(let k=reply.diffs.length-1; k>=0; --k) {  // Iterate backwards so we can delete as we go.
-          const diff = reply.diffs[k];
-
-          // Filter out just the input diffs
-          if(diff.cell_id.type !== 'grid_data')
-            continue;
-          const {pp, column_id, row_number} = diff.cell_id;
-          const j = column_numbers[column_id];
-          if(columns[j].type !== 'input')
-            continue;
-
-          // Remove the diff from the list so it's not processed in the next step farther down.
-          reply.diffs.splice(k, 1);
-
-          const scope = get_grid_widget(pp).columns[j].rows[row_number];
-          if(!scope.dirty) {
-            scope.input.value = diff.value;
-            update_approval_columns(pp, row_number);
-          }
-        }
-      }
-
-      doc_version_number = reply.doc_version_number;
-
-      // Update the UI according to what the server said has changed.
-      for(let diff of reply.diffs) {
-        if(diff.cell_id.type !== 'grid_data')
-          throw 'unimplemented diff type: ' + diff.cell_id.type;
-
-        const {pp, column_id, row_number} = diff.cell_id;
-        const widget = get_grid_widget(pp);
-        const j = column_numbers[column_id];
-        const scope = widget.columns[j].rows[row_number];
-
-        // Update the UI to show the new value of the cell.
-        if(columns[j].type === 'input') {
+        const len = pp_length(pp);
+        for(let i=0; i<len; ++i) {
+          const scope = widget_cache[pp].columns[j].rows[i];
           if(!scope.dirty)
-            scope.input.value = diff.value;
+            continue;
 
-          disable_approval_cells(pp, row_number);  // This helps prevent erroneous approvals.
-        } else if(columns[j].type === 'approval') {
-          scope.data = diff.value;
+          const value = (columns[j].type === 'input' ? scope.input.value : scope.data);
+          msg.diffs.push({
+            cell_id: make_grid_cell_id(pp, i, columns[j].id),
+            value: value,
+          });
+          scope.dirty = false;
+          rollback_tasks.push(() => {scope.dirty = true;});
+        }
+      }
+    }
+
+    // Talk to the server
+    let reply = null;
+    try {
+      reply = await to_server(msg);
+    } catch(e) {
+      for(let k=0; k<rollback_tasks.length; ++k)
+        rollback_tasks[k]();
+      throw e;
+    }
+
+    // If this is the first reply we've gotten, then we should treat the approval diffs specially.
+    if(doc_version_number === -1) {
+      for(let k=reply.diffs.length-1; k>=0; --k) {  // Iterate backwards so we can delete as we go.
+        const diff = reply.diffs[k];
+
+        // Filter out just the input diffs
+        if(diff.cell_id.type !== 'grid_data')
+          continue;
+        const {pp, column_id, row_number} = diff.cell_id;
+        const j = column_numbers[column_id];
+        if(columns[j].type !== 'input')
+          continue;
+
+        // Remove the diff from the list so it's not processed in the next step farther down.
+        reply.diffs.splice(k, 1);
+
+        const scope = get_grid_widget(pp).columns[j].rows[row_number];
+        if(!scope.dirty) {
+          scope.input.value = diff.value;
           update_approval_columns(pp, row_number);
         }
       }
-
-      if(all_changes_saved === null)  // It could be false by now, due to user edits in the meantime.
-        all_changes_saved = true;
-
-    } catch(e) {
-      console.error(e);
     }
 
-    await sleep(Math.floor(Math.random() * 2000) + 2000);  // Sleep for a few seconds
+    doc_version_number = reply.doc_version_number;
+
+    // Update the UI according to what the server said has changed.
+    for(let diff of reply.diffs) {
+      if(diff.cell_id.type !== 'grid_data')
+        throw 'unimplemented diff type: ' + diff.cell_id.type;
+
+      const {pp, column_id, row_number} = diff.cell_id;
+      const widget = get_grid_widget(pp);
+      const j = column_numbers[column_id];
+      const scope = widget.columns[j].rows[row_number];
+
+      // Update the UI to show the new value of the cell.
+      if(columns[j].type === 'input') {
+        if(!scope.dirty)
+          scope.input.value = diff.value;
+
+        disable_approval_cells(pp, row_number);  // This helps prevent erroneous approvals.
+      } else if(columns[j].type === 'approval') {
+        scope.data = diff.value;
+        update_approval_columns(pp, row_number);
+      }
+    }
+
+    if(all_changes_saved === null)  // It could be false by now, due to user edits in the meantime.
+      all_changes_saved = true;
+
+  } catch(e) {
+    console.error(e);
   }
+
+  await sleep(Math.floor(Math.random() * 2000) + 2000);  // Sleep for a few seconds
+}
+
+
 };
