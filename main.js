@@ -519,7 +519,7 @@ for(;;) {
       throw e;
     }
 
-    // If this is the first reply we've gotten, then we should treat the approval diffs specially.
+    // If this is the first reply we've gotten, then we shouldn't disable any approval cells.
     if(doc_version_number === -1) {
       for(let k=reply.diffs.length-1; k>=0; --k) {  // Iterate backwards so we can delete as we go.
         const diff = reply.diffs[k];
