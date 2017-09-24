@@ -283,6 +283,12 @@ const update_allchangessaveddiv = () => {
 };
 update_allchangessaveddiv();
 
+// This function bunches up a bunch of update tasks that often must happen together.
+const update_row = function(pp, row_number) {
+  update_approval_columns(pp, row_number);
+  update_allchangessaveddiv();
+};
+
 // get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
 // The memo is `widget_cache`, above. The cache is global because some other code wants to iterate over it.
 const get_grid_widget = (function() {
@@ -337,10 +343,8 @@ const get_grid_widget = (function() {
           approve_button.onclick = function() {
             scope.data = {email: 'loading', fingerprint: fingerprint(pp, i)};
             scope.dirty = true;
-            update_approval_columns(pp, i);
-
             all_changes_saved = false;
-            update_allchangessaveddiv();
+            update_row(pp, i);
           };
           approve_button_div.appendChild(approve_button);
 
@@ -367,10 +371,8 @@ const get_grid_widget = (function() {
           unapprove_button.onclick = function() {
             scope.data = null;
             scope.dirty = true;
-            update_approval_columns(pp, i);
-
             all_changes_saved = false;
-            update_allchangessaveddiv();
+            update_row(pp, i);
           };
           unapprove_button_div.appendChild(unapprove_button);
 
@@ -412,10 +414,8 @@ const get_grid_widget = (function() {
           input.addEventListener('input', function(_) {
             scope.dirty = true;
             disable_approval_cells(pp, i);
-            update_approval_columns(pp, i);
-
             all_changes_saved = false;
-            update_allchangessaveddiv();
+            update_row(pp, i);
           });
           master.appendChild(input);
         }
