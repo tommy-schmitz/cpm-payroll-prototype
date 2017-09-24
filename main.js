@@ -408,9 +408,7 @@ const get_grid_widget = (function() {
           div.style.width    = '60px';
           div.style.height   = '30px';
           master.appendChild(div);
-        } else if(columns[j].id === undefined) {
-          // do nothing
-        } else {
+        } else if(columns[j].type === 'input') {
           const input = document.createElement('input')
           scope.input = input;
           input.style.position = 'absolute';
@@ -426,6 +424,9 @@ const get_grid_widget = (function() {
             update_row(pp, i);
           });
           master.appendChild(input);
+        } else {
+          assert(columns[j].type === 'blank');
+          // do nothing in this case
         }
       }
     }
