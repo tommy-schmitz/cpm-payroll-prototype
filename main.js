@@ -25,6 +25,8 @@ const pp2date = function(pp) {  // Returns the beginning of the day at the begin
   const day = (which_half === 0  ?  1  :  16);
   return new Date(Date.UTC(year, month, day));
 };
+const date2code = (utc_date) => Math.floor(utc_date.getTime() / 86400000);
+const code2date = (day_code) => new Date(day_code * 86400000);
 const make_pp_name = function(pp) {
   assert(pp === (pp | 0));  // Verify that `pp` is an integer.
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -291,10 +293,45 @@ const update_allchangessaveddiv = () => {
 };
 update_allchangessaveddiv();
 
+const update_computed_columns = function() {
+  for(let pp in widget_cache) {
+    pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
+    const len = pp_length(pp);
+    for(let j=0; j<columns.length; ++j) {
+      for(let i=0; i<len; ++i) {
+        const scope = widget_cache[pp].columns[j].rows[i];
+        if(columns[j].type === 'computed_weekly_hours') {
+          // Add up the hours from today and the past 6 days, but only if today is Sunday.
+          const day_code = date2code(pp2date(pp)) + i;
+          if(code2date(day_code).getUTCDay() !== 0) {  // If it's not Sunday
+            scope.div.innerText = '';
+          } else {
+            let sum = 0;
+            for(let k=0; k<7; ++k) {
+              const day_code_2 = day_code - k;
+              const row_info = get_row_by_day_code(day_code_2);
+              if(/^[0-9]+(\.[0-9]+)?$/.test(row_info.worked_hours)) {
+                sum += parseFloat(row_info.worked_hours);
+              } else if(row_info.worked_hours !== '') {
+                sum = 'error';
+                break;
+              }
+            }
+            scope.div.innerText = sum + '';
+          }
+        } else {
+          // do nothing
+        }
+      }
+    }
+  }
+};
+
 // This function bunches up a bunch of update tasks that often must happen together.
 const update_row = function(pp, row_number) {
   update_approval_columns(pp, row_number);
   update_allchangessaveddiv();
+  update_computed_columns();
 };
 
 // get_grid_widget is a memoized function.  It takes a pay-period-number and returns an info object.
@@ -399,6 +436,15 @@ const get_grid_widget = (function() {
           disabled_button.setAttribute('title',
               'This row has changed recently. Please refresh the page before approving.' );
           disabled_div.appendChild(disabled_button);
+        } else if(columns[j].type === 'computed_weekly_hours') {
+          const div = document.createElement('div');
+          scope.div = div;
+          div.style.position = 'absolute';
+          div.style.left     = `${j * 60}px`;
+          div.style.top      = `${(i+1) * 30}px`;
+          div.style.width    = '60px';
+          div.style.height   = '30px';
+          master.appendChild(div);
         } else if(columns[j].type === 'computed_date') {
           const div = document.createElement('div');
           div.innerText = month_number + '/' + (pp_first_day + i);
@@ -425,7 +471,8 @@ const get_grid_widget = (function() {
           });
           master.appendChild(input);
         } else {
-          assert(columns[j].type === 'blank');
+          // Can't assert this yet because some code is yet unfinished ...
+          //assert(columns[j].type === 'blank');
           // do nothing in this case
         }
       }
@@ -440,6 +487,22 @@ const get_grid_widget = (function() {
     return widget_cache[pp];
   };
 }());
+
+// Returns a mapping from column ids to values (currently always strings, but will change in the future)
+const get_row_by_day_code = function(day_code) {
+  assert(day_code === (day_code | 0));  // Verify that it's an integer, just in case ...
+
+  const pp = date2pp(code2date(day_code));
+  const pp_start_code = date2code(pp2date(pp));
+  const row_number = day_code - pp_start_code;
+
+  const result = {};
+  for(let j=0; j<columns.length; ++j)
+    if(columns[j].type === 'input')
+      result[columns[j].id] = get_grid_widget(pp).columns[j].rows[row_number].input.value;
+
+  return result;
+};
 
 const container = document.createElement('div');
 container.style.position = 'relative';
@@ -459,6 +522,7 @@ prev_pp_button.onclick = () => {
   --visible_pp;
   update_container();
   update_whichppdiv();
+  update_computed_columns();
 };
 
 const next_pp_button = document.createElement('button');
@@ -467,6 +531,7 @@ next_pp_button.onclick = () => {
   ++visible_pp;
   update_container();
   update_whichppdiv();
+  update_computed_columns();
 };
 
 document.body.appendChild(all_changes_saved_div);
@@ -555,6 +620,7 @@ for(;;) {
       }
       update_approval_columns(pp, row_number);
     }
+    update_computed_columns();
 
     if(all_changes_saved === null) {  // It could be false by now, due to user edits in the meantime.
       all_changes_saved = true;
