@@ -254,8 +254,6 @@ const disable_approval_cells = function(pp, row_number) {
 
     scope.disabled = true;
   }
-
-  update_approval_columns(pp, row_number);
 };
 
 
@@ -414,6 +412,7 @@ const get_grid_widget = (function() {
           input.addEventListener('input', function(_) {
             scope.dirty = true;
             disable_approval_cells(pp, i);
+            update_approval_columns(pp, i);
 
             all_changes_saved = false;
             update_allchangessaveddiv();
