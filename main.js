@@ -6,6 +6,15 @@ const sleep = (millis) => new Promise((resolve, reject) => {
   setTimeout(resolve, millis);
 });
 
+const date2pp = function(utc_date) {
+  const year = utc_date.getUTCFullYear();
+  const year_code = year - 1970;
+  const month = utc_date.getUTCMonth();
+  const day = utc_date.getUTCDate();
+  const which_half = (day > 15.5  ?  1  :  0);
+  const pp = which_half + (2 * month) + (24 * year_code);
+  return pp;
+};
 const pp2date = function(pp) {  // Returns the beginning of the day at the beginning of the pay period, UTC
   assert(pp === (pp | 0));  // Verify that `pp` is an integer.
   const year_code = Math.floor(pp / 24);
