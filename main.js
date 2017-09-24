@@ -519,36 +519,13 @@ for(;;) {
       throw e;
     }
 
-    // If this is the first reply we've gotten, then we shouldn't disable any approval cells.
-    if(doc_version_number === -1) {
-      for(let k=reply.diffs.length-1; k>=0; --k) {  // Iterate backwards so we can delete as we go.
-        const diff = reply.diffs[k];
-
-        // Filter out just the input diffs
-        if(diff.cell_id.type !== 'grid_data')
-          continue;
-        const {pp, column_id, row_number} = diff.cell_id;
-        const j = column_numbers[column_id];
-        if(columns[j].type !== 'input')
-          continue;
-
-        // Remove the diff from the list so it's not processed in the next step farther down.
-        reply.diffs.splice(k, 1);
-
-        const scope = get_grid_widget(pp).columns[j].rows[row_number];
-        if(!scope.dirty) {
-          scope.input.value = diff.value;
-          update_approval_columns(pp, row_number);
-        }
-      }
-    }
-
+    const old_dvn = doc_version_number;
     doc_version_number = reply.doc_version_number;
 
     // Update the UI according to what the server said has changed.
     for(let diff of reply.diffs) {
       if(diff.cell_id.type !== 'grid_data')
-        throw 'unimplemented diff type: ' + diff.cell_id.type;
+        throw new Error('unimplemented diff type: ' + diff.cell_id.type);
 
       const {pp, column_id, row_number} = diff.cell_id;
       const widget = get_grid_widget(pp);
@@ -557,14 +534,18 @@ for(;;) {
 
       // Update the UI to show the new value of the cell.
       if(columns[j].type === 'input') {
+        // Disable approval cells in a row when the row changes. This helps prevent erroneous approvals.
+        if(old_dvn !== -1)  // Don't need to do it if we're just loading data for the first time ...
+          disable_approval_cells(pp, row_number);
+
         if(!scope.dirty)
           scope.input.value = diff.value;
-
-        disable_approval_cells(pp, row_number);  // This helps prevent erroneous approvals.
       } else if(columns[j].type === 'approval') {
         scope.data = diff.value;
-        update_approval_columns(pp, row_number);
+      } else {
+        throw new Error('weird diff; for column type: ' + columns[j].type);
       }
+      update_approval_columns(pp, row_number);
     }
 
     if(all_changes_saved === null) {  // It could be false by now, due to user edits in the meantime.
