@@ -266,9 +266,8 @@ const disable_approval_cells = function(pp, row_number) {
 };
 
 
-// Pick a current-ish pay period.
-const date = new Date();
-let visible_pp = Math.round(24*(date.getFullYear()-1970) + 2*date.getMonth() + date.getDate()/16) - 1;
+// Pick the current pay period.
+let visible_pp = date2pp(new Date(new Date() - 8*60*60*1000));  // That's 8 hrs, roughly the pacific time zone
 
 
 window.onload = async() => {
