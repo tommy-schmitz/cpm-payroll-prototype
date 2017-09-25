@@ -586,11 +586,19 @@ for(;;) {
       diffs: [],
     };
     const prev_allchangessaved = all_changes_saved;
+    assert(all_changes_saved === !!all_changes_saved);  // It can only be null while waiting for server.
     if(all_changes_saved === false)
       all_changes_saved = null;  // null means we're currently waiting for the server to confirm receipt.
     // If we fail to communicate with the server, then we'll want to re-dirty-ify the cells
     // that we've un-dirty-ified in this upcoming loop. Thus, we remember them in `rollback_tasks`.
-    const rollback_tasks = [() => {all_changes_saved = prev_allchangessaved;}];
+    const rollback_tasks = [function() {
+      if(all_changes_saved === null) {
+        all_changes_saved = prev_allchangessaved;
+      } else {
+        // If it's not null, then it must be false because the user edited something in the meantime.
+        assert(all_changes_saved === false);
+      }
+    }];
     for(let pp in widget_cache) {
       pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
 
