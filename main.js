@@ -40,6 +40,28 @@ const pp_length = function(pp) {
   return Math.round((pp2date(pp+1) - pp2date(pp)) / 86400000);
 };
 
+// Helper functions for controlling the dialog box that appears when leaving the page
+const {confirm_before_unload, dont_confirm_before_unload} = (function() {
+  const f = function(e) {
+    e.preventDefault();
+    e.returnValue = 'blah';
+    return e.returnValue;
+  };
+  let installed = false;
+  return {
+    confirm_before_unload() {
+      if(!installed)
+        window.addEventListener('beforeunload', f);
+      installed = true;
+    },
+    dont_confirm_before_unload() {
+      if(installed)
+        window.removeEventListener('beforeunload', f);
+      installed = false;
+    },
+  };
+}());
+
 // A simple web request protocol similar to XMLHttpRequest:
 const jsonp = (url, request_object) => new Promise((resolve, reject) => {
   // Prepare a script tag appropriately
@@ -286,10 +308,13 @@ login_token = google_user.getAuthResponse().id_token;
 let all_changes_saved = true;
 const all_changes_saved_div = document.createElement('div');
 const update_allchangessaveddiv = () => {
-  if(all_changes_saved === true)
+  if(all_changes_saved === true) {
     all_changes_saved_div.innerText = 'All changes saved in "the cloud"';
-  else  // could be false, could be null
+    dont_confirm_before_unload();
+  } else {  // could be false, could be null
     all_changes_saved_div.innerText = '...';
+    confirm_before_unload();
+  }
 };
 update_allchangessaveddiv();
 
