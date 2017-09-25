@@ -91,7 +91,15 @@ const to_server = async(request_object) => {
   if(request_object.login_token !== undefined)
     throw new Error("Don't put a login_token into the argument of to_server() ..!");
   request_object.login_token = login_token;  try {
-    return await jsonp("http://localhost:3001/", request_object);  //50.1.98.138:3001
+    try {
+      return await jsonp("http://50.1.98.138:3001/", request_object);  //50.1.98.138:3001
+    } catch(e) {
+      if(typeof e.message === 'string'  &&  ''.indexOf.call(e.message, 'Token used too late, ') === 0) {
+        dont_confirm_before_unload();
+        window.location.reload();
+      }
+      throw e;
+    }
   } finally {request_object.login_token = undefined;}
 };
 
