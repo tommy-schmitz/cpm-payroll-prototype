@@ -48,9 +48,9 @@ const jsonp = (url, request_object) => new Promise((resolve, reject) => {
     if(response.type === 'success')
       resolve(response.result);
     else if(response.type === 'failure')
-      reject(response.error);
+      reject(new Error(response.error.message + response.error.stack));
     else
-      reject('jsonp format error ....');
+      reject(new Error('jsonp format error ....'));
   };
   s.onerror = reject;
 
