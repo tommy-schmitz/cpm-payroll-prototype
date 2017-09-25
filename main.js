@@ -319,6 +319,12 @@ const google_user = await sign_in(sign_in_div);
 login_token = google_user.getAuthResponse().id_token;
 
 let all_changes_saved = true;
+  // Possible values:
+  //   true:  There are no user-edits anywhere that need to be sent to the server. Everything is clean.
+  //   false: There are user-edits in the document that we haven't yet tried to send to the server.
+  //   null:  We've sent some user-edits to the server, but haven't yet received a reply confirming receipt.
+  //          Furthermore, there are no OTHER user-edits in the document. When we receive confirmation, then
+  //          everything will be clean.
 const all_changes_saved_div = document.createElement('div');
 const update_allchangessaveddiv = () => {
   if(all_changes_saved === true) {
@@ -625,8 +631,9 @@ for(;;) {
       if(all_changes_saved === null) {
         all_changes_saved = prev_allchangessaved;
       } else {
-        // If it's not null, then it must be false because the user edited something in the meantime.
-        assert(all_changes_saved === false);
+        // If it's not null, then it must be either:
+        //   false, because the user edited something while we were waiting for a server reply. Or:
+        //   true, because there were no user-edits at all in the first place.
       }
     }];
     for(let pp in widget_cache) {
