@@ -27,6 +27,8 @@ const pp2date = function(pp) {  // Returns the beginning of the day at the begin
 };
 const date2code = (utc_date) => Math.floor(utc_date.getTime() / 86400000);
 const code2date = (day_code) => new Date(day_code * 86400000);
+const code2pp = (day_code) => date2pp(code2date(day_code));
+const pp2code = (pp) => date2code(pp2date(pp));
 const make_pp_name = function(pp) {
   assert(pp === (pp | 0));  // Verify that `pp` is an integer.
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -177,11 +179,13 @@ const columns = [
     title: 'Bereavement Hours',
   },
   {
-    type: 'computed_weekly_hours',
+    type: 'computed',
+    id: 'weekly_hours',
     title: 'Weekly Hours',
   },
   {
-    type: 'computed_approval_required',
+    type: 'computed',
+    id: 'approval_required',
     title: 'Pre-Approval REQUIRED for Overtime?',
   },
   {
@@ -204,7 +208,8 @@ const columns = [
     title: 'End Lunch',
   },
   {
-    type: 'computed_lunch_period',
+    type: 'computed',
+    id: 'lunch_period',
     title: 'Lunch Period',
   },
   {
@@ -326,34 +331,75 @@ const update_allchangessaveddiv = () => {
 };
 update_allchangessaveddiv();
 
+// Remember, 0 is Sunday, 1 is Monday, ..., 6 is Saturday.
 const update_computed_columns = function() {
+  const code2weekday = (day_code) => code2date(day_code).getUTCDay();
+  const loaded = (day_code) => (widget_cache[code2pp(day_code)] !== undefined);
+
+  // The following memoized function is kind of like a weird way of representing a spreadsheet with formulas.
+  const cache = {};
+  const stack = [];
+  const get = function(column_id, day_code) {
+    const key = JSON.stringify([column_id, day_code]);
+
+    // Check for circular dependency
+    for(let x of stack)
+      if(x === key)
+        throw new Error('circular dependency');
+
+    stack.push(key);  try {
+      const pp = code2pp(day_code);
+      const i = day_code - pp2code(pp);
+      const j = column_numbers[column_id];
+      if(j !== undefined  &&  columns[j].type === 'input') {
+        if(widget_cache[pp] === undefined) {
+          return 0;
+        } else {
+          const value = widget_cache[pp].columns[j].rows[i].input.value;
+          if(value === '')
+            return 0;
+          else if(/^[0-9]+(\.[0-9]+)?$/.test(value))
+            return parseFloat(value);
+          else
+            return 'error';
+        }
+      } else if(column_id === 'running_weekly_hours') {
+        const worked_hours_today = get('worked_hours', day_code);
+        if(code2weekday(day_code) === 1)
+          return worked_hours_today;
+        else
+          return worked_hours_today + get('running_weekly_hours', day_code - 1);
+      } else if(column_id === 'weekly_hours') {
+        if(code2weekday(day_code) === 0  ||  i === pp_length(pp)-1)  // If Sunday or last day of pay period
+          return get('running_weekly_hours', day_code);
+        else
+          return '';
+      } else if(column_id === 'approval_required') {
+        return 'unimplemented';
+      } else if(column_id === 'lunch_period') {
+        return 'unimplemented';
+      } else {
+        throw new Error('unrecognized column id: ' + column_id);
+      }
+    } finally {
+      stack.pop();
+    }
+  };
+
   for(let pp in widget_cache) {
     pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
     const len = pp_length(pp);
     for(let j=0; j<columns.length; ++j) {
+      if(columns[j].type !== 'computed')
+        continue;
+
       for(let i=0; i<len; ++i) {
         const scope = widget_cache[pp].columns[j].rows[i];
-        if(columns[j].type === 'computed_weekly_hours') {
-          // Add up the hours from today and the past 6 days, but only if today is Sunday.
-          const day_code = date2code(pp2date(pp)) + i;
-          if(code2date(day_code).getUTCDay() !== 0) {  // If it's not Sunday
-            scope.div.innerText = '';
-          } else {
-            let sum = 0;
-            for(let k=0; k<7; ++k) {
-              const day_code_2 = day_code - k;
-              const row_info = get_row_by_day_code(day_code_2);
-              if(/^[0-9]+(\.[0-9]+)?$/.test(row_info.worked_hours)) {
-                sum += parseFloat(row_info.worked_hours);
-              } else if(row_info.worked_hours !== '') {
-                sum = 'error';
-                break;
-              }
-            }
-            scope.div.innerText = sum + '';
-          }
-        } else {
-          // do nothing
+        try {
+          scope.div.innerText = get(columns[j].id, pp2code(pp) + i);
+        } catch(e) {
+          console.error(e);
+          scope.div.innerText = 'error';
         }
       }
     }
@@ -469,7 +515,7 @@ const get_grid_widget = (function() {
           disabled_button.setAttribute('title',
               'This row has changed recently. Please refresh the page before approving.' );
           disabled_div.appendChild(disabled_button);
-        } else if(columns[j].type === 'computed_weekly_hours') {
+        } else if(columns[j].type === 'computed') {
           const div = document.createElement('div');
           scope.div = div;
           div.style.position = 'absolute';
@@ -520,22 +566,6 @@ const get_grid_widget = (function() {
     return widget_cache[pp];
   };
 }());
-
-// Returns a mapping from column ids to values (currently always strings, but will change in the future)
-const get_row_by_day_code = function(day_code) {
-  assert(day_code === (day_code | 0));  // Verify that it's an integer, just in case ...
-
-  const pp = date2pp(code2date(day_code));
-  const pp_start_code = date2code(pp2date(pp));
-  const row_number = day_code - pp_start_code;
-
-  const result = {};
-  for(let j=0; j<columns.length; ++j)
-    if(columns[j].type === 'input')
-      result[columns[j].id] = get_grid_widget(pp).columns[j].rows[row_number].input.value;
-
-  return result;
-};
 
 const container = document.createElement('div');
 container.style.position = 'relative';
