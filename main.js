@@ -384,6 +384,12 @@ const update_computed_columns = function() {
   const get = function(column_id, day_code) {
     const key = JSON.stringify([column_id, day_code]);
 
+    if(cache[key] !== undefined)
+      return cache[key];
+
+    return cache[key] = (function() {
+
+
     // Check for circular dependency
     for(let x of stack)
       if(x === key)
@@ -427,6 +433,9 @@ const update_computed_columns = function() {
     } finally {
       stack.pop();
     }
+
+
+    }());
   };
 
   for(let pp in widget_cache) {
