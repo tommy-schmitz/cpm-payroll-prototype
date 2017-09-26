@@ -367,7 +367,20 @@ const get_input_value = function(column_id, day_code) {
   } else if(columns[j].input_type === 'text') {
     return r(value);
   } else if(columns[j].input_type === 'time') {
-    return invalid('unimplemented');
+    if(widget === undefined  ||  value === '')
+      return BLANK;
+
+    const matches = /^(1?[0-9]):([0-5][0-9]) ?([aApP])[mM]$/.exec(value);
+    if(matches === null)
+      return invalid('bad time format: ' + value);
+
+    const hours = parseFloat(matches[1]);
+    const minutes = parseFloat(matches[2]);
+    const am_pm = ''.toUpperCase.call(matches[3]);
+    if(hours < 1  ||  hours > 12)
+      return invalid('nonsensical time: ' + value);
+
+    return r(minutes + 60*hours + (am_pm==='P' ? 12*60 : 0) + (hours===12 ? -12*60 : 0));
   } else {
     throw new Error('unrecognized column input type: ' + columns[j].input_type);
   }
@@ -538,6 +551,13 @@ const update_computed_columns = function() {
             else
               scope.div.style.backgroundColor = '';
           }
+        } else if(columns[j].id === 'start_lunch'  ||  columns[j].id === 'end_lunch') {
+          const worked = get('worked_hours', day_code);
+          const this_cell = get(columns[j].id, day_code);
+          if(worked.type === 'valid'  &&  worked.value > 6  &&  this_cell.type !== 'valid')
+            scope.input.style.backgroundColor = 'pink';
+          else
+            scope.input.style.backgroundColor = '';
         } else if(columns[j].id === 'rest_period_observed') {
           const worked = get('worked_hours', day_code);
           const observed = get('rest_period_observed', day_code);
