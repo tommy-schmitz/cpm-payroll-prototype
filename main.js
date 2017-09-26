@@ -346,7 +346,7 @@ const get_input_value = function(column_id, day_code) {
   const pp = code2pp(day_code);
   const i = day_code - pp2code(pp);
   const j = column_numbers[column_id];
-  const widget = widget_cache[pp]
+  const widget = widget_cache[pp];
   const value = (widget===undefined  ?  undefined  :  widget.columns[j].rows[i].input.value);
   if(columns[j].input_type === 'hours') {
     if(widget === undefined  ||  value === '')
