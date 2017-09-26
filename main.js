@@ -337,6 +337,42 @@ const update_allchangessaveddiv = () => {
 };
 update_allchangessaveddiv();
 
+// Returns {type:'valid',result:(...)} or {type:'invalid'} or {type:'blank'}
+const get_input_value = function(column_id, day_code) {
+  const r       = function(value) {return {type: 'valid', value};};
+  const invalid = function(error) {return {type: 'invalid', column_id, day_code, error};};
+  const BLANK   = {type: 'blank'};
+
+  const pp = code2pp(day_code);
+  const i = day_code - pp2code(pp);
+  const j = column_numbers[column_id];
+  const widget = widget_cache[pp]
+  const value = (widget===undefined  ?  undefined  :  widget.columns[j].rows[i].input.value);
+  if(columns[j].input_type === 'hours') {
+    if(widget === undefined  ||  value === '')
+      return r(0);
+    else if(/^[0-9]+(\.[0-9]+)?$/.test(value))
+      return r(parseFloat(value));
+    else
+      return invalid(value);
+  } else if(columns[j].input_type === 'yes_no') {
+    if(widget === undefined  ||  value === '')
+      return BLANK;
+    else if(''.toUpperCase.call(value) === 'YES')
+      return r(true);
+    else if(''.toUpperCase.call(value) === 'NO')
+      return r(false);
+    else
+      return invalid(value);
+  } else if(columns[j].input_type === 'text') {
+    return r(value);
+  } else if(columns[j].input_type === 'time') {
+    return invalid('unimplemented');
+  } else {
+    throw new Error('unrecognized column input type: ' + columns[j].input_type);
+  }
+};
+
 // Remember, 0 is Sunday, 1 is Monday, ..., 6 is Saturday.
 const update_computed_columns = function() {
   const code2weekday = (day_code) => code2date(day_code).getUTCDay();
@@ -358,28 +394,29 @@ const update_computed_columns = function() {
       const i = day_code - pp2code(pp);
       const j = column_numbers[column_id];
       if(j !== undefined  &&  columns[j].type === 'input') {
-        if(widget_cache[pp] === undefined) {
-          return 0;
-        } else {
-          const value = widget_cache[pp].columns[j].rows[i].input.value;
-          if(value === '')
-            return 0;
-          else if(/^[0-9]+(\.[0-9]+)?$/.test(value))
-            return parseFloat(value);
-          else
-            return 'error';
-        }
+        return get_input_value(column_id, day_code);
       } else if(column_id === 'running_weekly_hours') {
         const worked_hours_today = get('worked_hours', day_code);
-        if(code2weekday(day_code) === 1)
+
+        if(code2weekday(day_code) === 1) {
           return worked_hours_today;
-        else
-          return worked_hours_today + get('running_weekly_hours', day_code - 1);
+        } else {
+          const total_so_far = get('running_weekly_hours', day_code - 1);
+          if(total_so_far.type !== 'valid'  ||  worked_hours_today.type !== 'valid')
+            return {type: 'invalid', error: [total_so_far.error, worked_hours_today.error]};
+          else
+            return {type: 'valid', value: total_so_far.value + worked_hours_today.value};
+        }
       } else if(column_id === 'weekly_hours') {
-        if(code2weekday(day_code) === 0  ||  i === pp_length(pp)-1)  // If Sunday or last day of pay period
-          return get('running_weekly_hours', day_code);
-        else
+        if(code2weekday(day_code) === 0  ||  i === pp_length(pp)-1) {  // If Sunday or last day of pay period
+          const v = get('running_weekly_hours', day_code);
+          if(v.type === 'valid')
+            return v.value;
+          else
+            return 'error';
+        } else {
           return '';
+        }
       } else if(column_id === 'approval_required') {
         return 'unimplemented';
       } else if(column_id === 'lunch_period') {
@@ -396,16 +433,28 @@ const update_computed_columns = function() {
     pp = pp | 0;  // Without this line, `pp` will be a string instead of an integer.
     const len = pp_length(pp);
     for(let j=0; j<columns.length; ++j) {
-      if(columns[j].type !== 'computed')
-        continue;
-
       for(let i=0; i<len; ++i) {
         const scope = widget_cache[pp].columns[j].rows[i];
-        try {
-          scope.div.innerText = get(columns[j].id, pp2code(pp) + i);
-        } catch(e) {
-          console.error(e);
-          scope.div.innerText = 'error';
+        const day_code = pp2code(pp) + i;
+        if(columns[j].type === 'computed') {
+          try {
+            scope.div.innerText = get(columns[j].id, day_code);
+          } catch(e) {
+            console.error(e);
+            scope.div.innerText = 'error';
+          }
+        } else if(columns[j].id === 'rest_period_observed') {
+          const worked = get('worked_hours', day_code);
+          const observed = get('rest_period_observed', day_code);
+          if(worked.type === 'valid'  &&  worked.value > 4  &&  observed.type !== 'valid')
+            scope.input.style.backgroundColor = 'pink';
+          else
+            scope.input.style.backgroundColor = '';
+        } else if(columns[j].type === 'input') {
+          if(get(columns[j].id, day_code).type === 'invalid')
+            scope.input.style.backgroundColor = 'pink';
+          else
+            scope.input.style.backgroundColor = '';
         }
       }
     }
