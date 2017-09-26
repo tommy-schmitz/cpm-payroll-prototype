@@ -755,6 +755,7 @@ const get_grid_widget = (function() {
             s.top      = `${(i+1) * 30}px`;
             s.width    = '60px';
             s.height   = '30px';
+            s.overflow = 'hidden';
             master.appendChild(div);
             continue;
           }
