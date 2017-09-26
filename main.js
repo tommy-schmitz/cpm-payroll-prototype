@@ -887,6 +887,9 @@ const update_container = function() {
 };
 update_container();
 
+const which_employee_div = document.createElement('div');
+which_employee_div.innerText = 'This timesheet is for: ' + employee_email;
+
 const which_pp_div = document.createElement('div');
 const update_whichppdiv = () => {which_pp_div.innerText = make_pp_name(visible_pp);};
 update_whichppdiv();
@@ -910,6 +913,7 @@ next_pp_button.onclick = () => {
 };
 
 document.body.appendChild(all_changes_saved_div);
+document.body.appendChild(which_employee_div);
 document.body.appendChild(prev_pp_button);
 document.body.appendChild(next_pp_button);
 document.body.appendChild(which_pp_div);
