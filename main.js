@@ -1,5 +1,32 @@
 "use strict";
 
+// Too lazy for proper modularization at the moment. This is a copy-paste of "shared.js" from server code.
+const {is_director, is_supervisor} = (function() {const module = {};
+const self = module.exports = {
+  is_director(email) {
+    return !!{
+      'elizabethcoyner@cpm.org': true,
+    }[email];
+  },
+  is_supervisor(email) {
+    if(self.is_director(email))
+      return true;
+
+    return !!{
+      'andrewreifers@cpm.org': true,
+      'debbiejacobs@cpm.org': true,
+      'shandameyerfrank@cpm.org': true,
+      'tommyschmitz@cpm.org': true,  //debug
+    }[email];
+  },
+};
+return module.exports;}());
+
+// get the GET parameters from the url
+const get_param = {};
+for(let p of new URLSearchParams(window.location.search))
+  get_param[p[0]] = p[1];
+
 const assert = (b) => {if(!b) throw new Error('assertion failed');};
 
 const sleep = (millis) => new Promise((resolve, reject) => {
@@ -120,6 +147,50 @@ const sign_in = (sign_in_div) => new Promise((resolve, reject) => {
   document.head.appendChild(script);
 });
 
+
+window.onload = async() => {
+
+
+const sign_in_div = document.createElement('div');
+document.body.innerText = 'Please sign in.';
+document.body.appendChild(document.createElement('br'));
+document.body.appendChild(sign_in_div);
+
+const google_user = await sign_in(sign_in_div);
+const basic_profile = google_user.getBasicProfile();
+const logged_in_email = basic_profile.getEmail();
+login_token = google_user.getAuthResponse().id_token;
+
+let employee_email = null;  // Initialized in the function below.
+
+// Throws in case the URL looks bad.
+const parse_the_url = function() {
+  if(get_param.action === 'specific') {
+    employee_email = get_param.employee;
+    if(typeof employee_email !== 'string')
+      throw new Error('The URL looks wrong ... please fix it somehow!');
+
+    if(''.substr.call(employee_email, -8) !== '@cpm.org')
+      throw new Error('The URL parameter "employee" should be an email address @cpm.org');
+
+    if(!is_supervisor(logged_in_email))
+      throw new Error("Only supervisors can access other people's timesheets.");
+  } else if(get_param.action === 'my_timesheet') {
+    employee_email = logged_in_email;
+  } else {
+    throw new Error('The URL looks wrong ... please fix it somehow!');
+  }
+};
+
+try {
+  parse_the_url();
+} catch(e) {
+  document.body.innerText = e.stack;
+  throw e;
+}
+
+assert(typeof employee_email === 'string');
+
 const columns = [
   {
     type: 'approval',
@@ -220,10 +291,25 @@ const columns = [
     title: 'Rest period(s) observed',
   },
 ];
+
 const column_numbers = {};
 for(let j=0; j<columns.length; ++j)
   if(columns[j].id !== undefined)
     column_numbers[columns[j].id] = j;
+
+// Determine whether the approval columns are read-only or not.
+for(let c of columns) {
+  if(c.type !== 'approval')
+    continue;
+
+  if(c.id === 'supervisor_approval') {
+    c.read_only = !is_supervisor(logged_in_email);
+  } else if(c.id === 'director_approval') {
+    c.read_only = !is_director(logged_in_email);
+  } else {
+    throw new Error('This code should never run. Geez! ' + c.id);
+  }
+}
 
 const make_grid_cell_id = function(pp, row_number, column_id) {
   return {
@@ -270,9 +356,20 @@ const update_approval_columns = function(pp, i) {
 
     const column_id = columns[j].id;
     const scope = widget.columns[j].rows[i];
+    const row_fingerprint = fingerprint(pp, i);
+
+    // If read-only ...
+    if(columns[j].read_only) {
+      if(scope.data !== null  &&  scope.data.fingerprint === row_fingerprint)
+        scope.div.innerText = scope.data.email;
+      else
+        scope.div.innerText = '';
+      continue;
+    }
+
+    // If not read-only ...
     if(scope.current_div !== null)
       scope.current_div.remove();
-    const row_fingerprint = fingerprint(pp, i);
     if(scope.data !== null  &&  scope.data.fingerprint === row_fingerprint) {
       scope.approver_div.innerText = scope.data.email;
       scope.current_div = scope.unapprove_button_div;
@@ -306,18 +403,6 @@ const disable_approval_cells = function(pp, row_number) {
 
 // Pick the current pay period.
 let visible_pp = date2pp(new Date(new Date() - 8*60*60*1000));  // That's 8 hrs, roughly the pacific time zone
-
-
-window.onload = async() => {
-
-
-const sign_in_div = document.createElement('div');
-document.body.innerText = 'Please sign in to view your timesheet.';
-document.body.appendChild(document.createElement('br'));
-document.body.appendChild(sign_in_div);
-
-const google_user = await sign_in(sign_in_div);
-login_token = google_user.getAuthResponse().id_token;
 
 let all_changes_saved = true;
   // Possible values:
@@ -642,6 +727,22 @@ const get_grid_widget = (function() {
         if(columns[j].type === 'approval') {
           scope.data = null;  // Either null or {email: (string), fingerprint: (string)}
           scope.disabled = false;
+
+          // If it's read-only, then just a single div is fine.
+          if(columns[j].read_only) {
+            const div = document.createElement('div');
+            scope.div = div;
+            const s = div.style;  // for short-hand
+            s.position = 'absolute';
+            s.left     = `${j * 60}px`;
+            s.top      = `${(i+1) * 30}px`;
+            s.width    = '60px';
+            s.height   = '30px';
+            master.appendChild(div);
+            continue;
+          }
+          // If it's not read-only, then we'll be swapping among several divs, as follows ...
+
           scope.current_div = null;
 
           const approve_button_div = document.createElement('div');
@@ -805,6 +906,7 @@ for(;;) {
     const msg = {
       type: 'sync',
       doc_version_number,
+      email: employee_email,
       diffs: [],
     };
     const prev_allchangessaved = all_changes_saved;
@@ -827,6 +929,9 @@ for(;;) {
 
       for(let j=0; j<columns.length; ++j) {
         if(columns[j].type !== 'input'  &&  columns[j].type !== 'approval')
+          continue;
+
+        if(columns[j].type === 'approval'  &&  columns[j].read_only)
           continue;
 
         const len = pp_length(pp);
