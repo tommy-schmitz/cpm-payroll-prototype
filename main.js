@@ -382,6 +382,8 @@ const update_computed_columns = function() {
   const cache = {};
   const stack = [];
   const get = function(column_id, day_code) {
+    assert(column_id !== undefined  &&  day_code !== undefined);
+
     const key = JSON.stringify([column_id, day_code]);
 
     if(cache[key] !== undefined)
@@ -739,6 +741,10 @@ for(;;) {
       const {pp, column_id, row_number} = diff.cell_id;
       const widget = get_grid_widget(pp);
       const j = column_numbers[column_id];
+      if(j === undefined) {
+        console.warn('server gave me a bad column_id: ' + column_id);
+        continue;
+      }
       const scope = widget.columns[j].rows[row_number];
 
       // Update the UI to show the new value of the cell.
