@@ -373,7 +373,7 @@ const get_input_value = function(column_id, day_code) {
   }
 };
 
-// Remember, 0 is Sunday, 1 is Monday, ..., 6 is Saturday.
+// Remember: 0 is Sunday, 1 is Monday, ..., 6 is Saturday.
 const update_computed_columns = function() {
   const code2weekday = (day_code) => code2date(day_code).getUTCDay();
   const loaded = (day_code) => (widget_cache[code2pp(day_code)] !== undefined);
@@ -400,10 +400,15 @@ const update_computed_columns = function() {
     stack.push(key);  try {
       const pp = code2pp(day_code);
       const i = day_code - pp2code(pp);
-      const j = column_numbers[column_id];
-      if(j !== undefined  &&  columns[j].type === 'input') {
+      const j = column_numbers[column_id];  // Might be undefined, if column_id is not a "real" column
+      if(j !== undefined  &&  columns[j].type === 'approval') {
+        if(widget_cache[pp] === undefined)
+          return null;
+        else
+          return widget_cache[pp].columns[j].rows[i].data;
+      } else if(j !== undefined  &&  columns[j].type === 'input') {
         return get_input_value(column_id, day_code);
-      } else if(column_id === 'running_weekly_hours') {
+      } else if(column_id === 'running_weekly_hours') {  // Not a real column
         const worked_hours_today = get('worked_hours', day_code);
 
         if(code2weekday(day_code) === 1) {
@@ -415,6 +420,37 @@ const update_computed_columns = function() {
           else
             return {type: 'valid', value: total_so_far.value + worked_hours_today.value};
         }
+      } else if(column_id === 'running_days_worked') {  // Not a real column
+        const worked_hours_today = get('worked_hours', day_code);
+        const amount = (worked_hours_today.value > 0  ?  1  :  0)
+
+        if(code2weekday(day_code) === 1) {
+          if(worked_hours_today.type === 'valid')
+            return {type: 'valid', value: amount};
+          else
+            return worked_hours_today;
+        } else {
+          const total_so_far = get('running_days_worked', day_code - 1);
+          if(total_so_far.type !== 'valid'  ||  worked_hours_today.type !== 'valid')
+            return {type: 'invalid', error: [total_so_far.error, worked_hours_today.error]};
+          else
+            return {type: 'valid', value: total_so_far.value + amount};
+        }
+      } else if(column_id === 'running_regular_hours') {  // Not a real column
+        const hours_today = get('regular_hours', day_code);
+
+        if(code2weekday(day_code) === 1) {
+          if(hours_today === '')
+            return {type: 'invalid', column_id: 'regular_hours', day_code, error: ''};
+          else
+            return {type: 'valid', value: hours_today};
+        } else {
+          const total_so_far = get('running_regular_hours', day_code - 1);
+          if(total_so_far.type !== 'valid'  ||  hours_today === '')
+            return {type: 'invalid', error: [total_so_far.error, hours_today]};
+          else
+            return {type: 'valid', value: total_so_far.value + hours_today};
+        }
       } else if(column_id === 'weekly_hours') {
         if(code2weekday(day_code) === 0  ||  i === pp_length(pp)-1) {  // If Sunday or last day of pay period
           const v = get('running_weekly_hours', day_code);
@@ -425,8 +461,49 @@ const update_computed_columns = function() {
         } else {
           return '';
         }
+      } else if(column_id === 'regular_hours') {
+        const worked = get('worked_hours', day_code);
+        if(worked.type === 'valid') {
+          if(code2weekday(day_code) === 1) {
+            return Math.min(worked.value, 8);
+          } else if(get('running_days_worked', day_code).value === 7) {
+            return 0;
+          } else {
+            const running = get('running_regular_hours', day_code - 1);
+            if(running.type === 'valid') {
+              return Math.min(worked.value, 8, 40 - running.value);
+            } else {
+              return '';
+            }
+          }
+        } else {
+          return '';
+        }
+      } else if(column_id === 'overtime_hours') {
+        const worked = get('worked_hours', day_code);
+        const reg_h = get('regular_hours', day_code);
+        const dt_h = get('doubletime_hours', day_code);
+        if(worked.type !== 'valid'  ||  reg_h === ''  ||  dt_h === '')
+          return '';
+        else
+          return worked.value - reg_h - dt_h;
+      } else if(column_id === 'doubletime_hours') {
+        const worked = get('worked_hours', day_code);
+        if(worked.type === 'valid') {
+          if(code2weekday(day_code) === 0)
+            return Math.max(0, worked.value - 8);
+          else
+            return Math.max(0, worked.value - 12);
+        } else {
+          return '';
+        }
       } else if(column_id === 'approval_required') {
-        return 'unimplemented';
+        const ot_h = get('overtime_hours', day_code);
+        const dt_h = get('doubletime_hours', day_code);
+        if(ot_h !== ''  &&  dt_h !== ''  &&  (ot_h > 0  ||  dt_h > 0))
+          return 'YES';
+        else
+          return '';
       } else if(column_id === 'lunch_period') {
         return 'unimplemented';
       } else {
@@ -453,6 +530,13 @@ const update_computed_columns = function() {
           } catch(e) {
             console.error(e);
             scope.div.innerText = 'error';
+          }
+
+          if(columns[j].id === 'approval_required') {
+            if(get('approval_required', day_code) === 'YES'  &&  get('director_approval', day_code) === null)
+              scope.div.style.backgroundColor = 'pink';
+            else
+              scope.div.style.backgroundColor = '';
           }
         } else if(columns[j].id === 'rest_period_observed') {
           const worked = get('worked_hours', day_code);
@@ -589,6 +673,7 @@ const get_grid_widget = (function() {
           div.style.top      = `${(i+1) * 30}px`;
           div.style.width    = '60px';
           div.style.height   = '30px';
+          div.style.overflow = 'hidden';
           master.appendChild(div);
         } else if(columns[j].type === 'computed_date') {
           const div = document.createElement('div');
