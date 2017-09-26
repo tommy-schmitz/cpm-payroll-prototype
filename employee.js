@@ -26,6 +26,9 @@ const make_pp_name = function(pp) {
   const date_range = (date.getUTCDate() === 1  ?  ' 1-15 '  :  ' 16-END ');
   return MONTHS[date.getUTCMonth()] + date_range + date.getUTCFullYear();
 };
+const pp_length = function(pp) {
+  return Math.round((pp2date(pp+1) - pp2date(pp)) / 86400000);
+};
 
 // Positions element e1 at the place where element e2 is.
 const put_element_over = function(e1, e2) {
