@@ -28,6 +28,7 @@ const pp2date = function(pp) {  // Returns the beginning of the day at the begin
 const date2code = (utc_date) => Math.floor(utc_date.getTime() / 86400000);
 const code2date = (day_code) => new Date(day_code * 86400000);
 const code2pp = (day_code) => date2pp(code2date(day_code));
+const code2weeknumber = (day_code) => Math.floor((day_code + 3) / 7);
 const pp2code = (pp) => date2code(pp2date(pp));
 const make_pp_name = function(pp) {
   assert(pp === (pp | 0));  // Verify that `pp` is an integer.
@@ -518,7 +519,12 @@ const update_computed_columns = function() {
         else
           return '';
       } else if(column_id === 'lunch_period') {
-        return 'unimplemented';
+        const start = get('start_lunch', day_code);
+        const end = get('end_lunch', day_code);
+        if(start.type === 'valid'  &&  end.type === 'valid')
+          return end.value - start.value;
+        else
+          return '';
       } else {
         throw new Error('unrecognized column id: ' + column_id);
       }
