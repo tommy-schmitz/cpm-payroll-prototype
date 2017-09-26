@@ -215,6 +215,22 @@ const columns = [
     title: 'Daily Hours Worked',
   },
   {
+    type: 'computed',
+    id: 'regular_hours',
+    title: 'Reg',
+  },
+  {
+    type: 'computed',
+    id: 'overtime_hours',
+    title: 'OT',
+  },
+  {
+    type: 'computed',
+    id: 'doubletime_hours',
+    title: 'DT',
+  },
+/*
+  {
     type: 'input',
     input_type: 'hours',
     id: 'holiday_hours',
@@ -250,6 +266,7 @@ const columns = [
     id: 'bereavement_hours',
     title: 'Bereavement Hours',
   },
+*/
   {
     type: 'computed',
     id: 'weekly_hours',
