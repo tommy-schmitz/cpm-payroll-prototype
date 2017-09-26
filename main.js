@@ -6,6 +6,7 @@ const self = module.exports = {
   is_director(email) {
     return !!{
       'elizabethcoyner@cpm.org': true,
+      'tommyschmitz@cpm.org': true,  //debug
     }[email];
   },
   is_supervisor(email) {
