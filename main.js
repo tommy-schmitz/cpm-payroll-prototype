@@ -471,7 +471,7 @@ const update_computed_columns = function() {
           if(v.type === 'valid')
             return v.value;
           else
-            return 'error';
+            return "can't compute";
         } else {
           return '';
         }
