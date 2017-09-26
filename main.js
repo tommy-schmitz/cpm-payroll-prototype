@@ -851,10 +851,12 @@ for(;;) {
     try {
       reply = await to_server(msg);
     } catch(e) {
+      await sleep(1000);  // debug
       for(let k=0; k<rollback_tasks.length; ++k)
         rollback_tasks[k]();
       throw e;
     }
+    await sleep(1000);  // debug
 
     const old_dvn = doc_version_number;
     doc_version_number = reply.doc_version_number;
