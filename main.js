@@ -597,6 +597,22 @@ const get_grid_widget = (function() {
     const result = {};
     const master = result.master = document.createElement('div');
 
+    result.row_highlights = [];
+    const len = pp_length(pp);
+    for(let i=0; i<len; ++i) {
+      const div = document.createElement('div');
+      result.row_highlights.push(div);
+      const s = div.style;  // for short-hand
+      s.position = 'absolute';
+      s.left     = '0';
+      s.top      = `${(i+1)*30}px`;
+      s.right    = '0';
+      s.height   = '30px';
+      const day_code = pp2code(pp) + i;
+      s.backgroundColor = (code2weeknumber(day_code) % 2 === 0 ? '#ccffcc' : '');
+      master.appendChild(div);
+    }
+
     result.columns = [];
     for(let j=0; j<columns.length; ++j) {
       const column_id = columns[j].id;
@@ -619,7 +635,6 @@ const get_grid_widget = (function() {
       const pp_first_day = pp_date.getUTCDate();
 
       result.columns.push({rows: []});
-      const len = pp_length(pp);
       for(let i=0; i<len; ++i) {
         const scope = {};
         result.columns[j].rows.push(scope);
